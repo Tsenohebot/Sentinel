@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINEL — Global Intelligence Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<style>
+  :root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #0f1520;
+    --bg-tertiary: #141c2b;
+    --bg-panel: rgba(15, 21, 32, 0.92);
+    --border: rgba(0, 200, 255, 0.12);
+    --border-bright: rgba(0, 200, 255, 0.3);
+    --accent-cyan: #00c8ff;
+    --accent-green: #00ff88;
+    --accent-red: #ff3366;
+    --accent-amber: #ffaa00;
+    --accent-purple: #8855ff;
+    --text-primary: #e0e8f0;
+    --text-secondary: #7a8ba0;
+    --text-dim: #4a5568;
+    --glow-cyan: 0 0 20px rgba(0, 200, 255, 0.15);
+    --glow-green: 0 0 15px rgba(0, 255, 136, 0.1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: linear-gradient(180deg, rgba(10,14,23,0.98), rgba(10,14,23,0.9));
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; z-index: 1000; backdrop-filter: blur(12px);
+  }
+
+  .header-left { display: flex; align-items: center; gap: 16px; }
+
+  .logo {
+    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 16px;
+    letter-spacing: 4px; color: var(--accent-cyan);
+    text-shadow: 0 0 20px rgba(0, 200, 255, 0.4);
+  }
+  .logo-sub { font-size: 9px; letter-spacing: 3px; color: var(--text-secondary); text-transform: uppercase; }
+
+  .header-status { display: flex; align-items: center; gap: 20px; font-size: 11px; color: var(--text-secondary); }
+
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-green);
+    animation: pulse 2s infinite; display: inline-block; margin-right: 6px;
+  }
+  .status-dot.live { background: var(--accent-green); }
+  .status-dot.sim { background: var(--accent-amber); }
+  .status-dot.off { background: var(--accent-red); }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .header-time { font-family: 'Orbitron', sans-serif; font-size: 13px; color: var(--accent-cyan); letter-spacing: 2px; }
+
+  #map { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; z-index: 1; }
+  .leaflet-container { background: var(--bg-primary) !important; }
+
+  .panel {
+    position: fixed; z-index: 500;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 8px; backdrop-filter: blur(16px);
+    box-shadow: var(--glow-cyan), 0 8px 32px rgba(0,0,0,0.5);
+    overflow: hidden; transition: opacity 0.3s, transform 0.3s;
+  }
+  .panel.hidden { opacity: 0; pointer-events: none; transform: translateY(10px); }
+
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: rgba(0, 200, 255, 0.03);
+  }
+
+  .panel-title {
+    font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+    letter-spacing: 3px; color: var(--accent-cyan); text-transform: uppercase;
+  }
+
+  .panel-badge {
+    font-size: 9px; padding: 2px 8px; border-radius: 10px;
+    letter-spacing: 1px;
+  }
+  .badge-live { background: rgba(0,255,136,0.1); color: var(--accent-green); border: 1px solid rgba(0,255,136,0.2); }
+  .badge-sim { background: rgba(255,170,0,0.1); color: var(--accent-amber); border: 1px solid rgba(255,170,0,0.2); }
+  .badge-count { background: rgba(0,200,255,0.1); color: var(--accent-cyan); border: 1px solid rgba(0,200,255,0.2); }
+
+  .panel-body {
+    padding: 10px 14px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  /* FLIGHTS */
+  .panel-flights { top: 58px; left: 12px; width: 340px; max-height: calc(50vh - 40px); }
+
+  .flight-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer; transition: background 0.2s;
+  }
+  .flight-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  .flight-icon { font-size: 16px; width: 28px; text-align: center; }
+  .flight-info { flex: 1; min-width: 0; }
+  .flight-callsign { font-size: 12px; font-weight: 700; color: var(--accent-cyan); letter-spacing: 1px; }
+  .flight-route { font-size: 10px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flight-alt { font-size: 10px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+  .flight-alt span { color: var(--accent-green); font-weight: 500; }
+
+  /* SHIPPING */
+  .panel-shipping { top: 58px; right: 12px; width: 340px; max-height: calc(50vh - 40px); }
+  .ship-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
+  .ship-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  .ship-icon { font-size: 16px; width: 28px; text-align: center; }
+  .ship-name { font-size: 12px; font-weight: 700; color: var(--accent-amber); letter-spacing: 1px; }
+  .ship-detail { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+  .ship-status { font-size: 9px; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; font-weight: 500; }
+  .ship-status.transit { background: rgba(0,200,255,0.1); color: var(--accent-cyan); }
+  .ship-status.port { background: rgba(0,255,136,0.1); color: var(--accent-green); }
+  .ship-status.delayed { background: rgba(255,51,102,0.1); color: var(--accent-red); }
+
+  /* NEWS */
+  .panel-news { bottom: 12px; left: 12px; width: 440px; max-height: calc(50vh - 20px); }
+  .news-item { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
+  .news-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  .news-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .news-source { font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--accent-cyan); text-transform: uppercase; }
+  .news-time { font-size: 9px; color: var(--text-dim); }
+  .news-region-tag { font-size: 8px; padding: 1px 6px; border-radius: 3px; background: rgba(136,85,255,0.15); color: var(--accent-purple); letter-spacing: 1px; }
+  .news-headline { font-size: 12px; color: var(--text-primary); line-height: 1.5; }
+  .news-severity { display: inline-block; width: 4px; height: 4px; border-radius: 50%; margin-right: 6px; }
+  .severity-high { background: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
+  .severity-med { background: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
+  .severity-low { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+
+  .region-selector { display: flex; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .region-btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 3px 8px;
+    border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+    border-radius: 4px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s;
+  }
+  .region-btn:hover, .region-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+
+  /* STOCKS */
+  .panel-stocks { bottom: 12px; right: 12px; width: 360px; max-height: calc(50vh - 20px); }
+
+  /* SATELLITE PANEL */
+  .panel-satellites { top: 58px; right: 368px; width: 320px; max-height: calc(50vh - 40px); }
+  .sat-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
+  .sat-item:hover { background: rgba(136,85,255,0.08); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  .sat-item.iss-item { border-left: 2px solid var(--accent-green); padding-left: 8px; }
+  .sat-icon { font-size: 16px; width: 28px; text-align: center; }
+  .sat-name { font-size: 12px; font-weight: 700; color: var(--accent-purple); letter-spacing: 1px; }
+  .sat-name.iss { color: var(--accent-green); }
+  .sat-detail { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+  .sat-alt { font-size: 10px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+  .sat-alt span { color: var(--accent-purple); font-weight: 500; }
+  .iss-orbit-line { stroke: var(--accent-green); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; opacity: 0.5; }
+
+  /* TRAFFIC LAYER TOGGLE */
+  .traffic-toggle {
+    position: fixed; bottom: 26px; right: 100px; z-index: 600;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .traffic-btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    padding: 5px 10px; border: 1px solid var(--border); background: rgba(15,21,32,0.8);
+    color: var(--text-secondary); cursor: pointer; border-radius: 4px; letter-spacing: 1px;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+  }
+  .traffic-btn:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
+  .traffic-btn.active { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,170,0,0.1); }
+
+  /* WEATHER LOCATION INFO */
+  .weather-location {
+    margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .weather-location-name {
+    font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
+    color: var(--text-primary); letter-spacing: 1px; margin-bottom: 2px;
+  }
+  .weather-location-region {
+    font-size: 10px; color: var(--text-secondary); letter-spacing: 0.5px;
+  }
+  .weather-wiki-summary {
+    font-size: 11px; color: var(--text-secondary); line-height: 1.5;
+    margin-top: 8px; max-height: 80px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .weather-wiki-summary::-webkit-scrollbar { width: 3px; }
+  .weather-wiki-summary::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+  .weather-wiki-link {
+    font-size: 9px; color: var(--accent-cyan); text-decoration: none;
+    letter-spacing: 0.5px; display: inline-block; margin-top: 4px;
+  }
+  .weather-wiki-link:hover { text-decoration: underline; }
+  .stock-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .stock-left { display: flex; align-items: center; gap: 10px; }
+  .stock-symbol { font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700; color: var(--text-primary); min-width: 50px; }
+  .stock-name { font-size: 10px; color: var(--text-secondary); }
+  .stock-right { text-align: right; }
+  .stock-price { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stock-change { font-size: 11px; font-weight: 500; margin-top: 2px; }
+  .stock-up { color: var(--accent-green); }
+  .stock-down { color: var(--accent-red); }
+  .stock-sparkline { height: 30px; margin-top: 4px; }
+  .stock-sparkline canvas { width: 100%; height: 100%; }
+
+  .panel-toggles { display: flex; gap: 4px; }
+  .toggle-btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 4px 10px;
+    border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+    border-radius: 4px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s;
+  }
+  .toggle-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+  .toggle-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+
+  .scanline {
+    position: fixed; top: 48px; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,200,255,0.15), transparent);
+    z-index: 999; animation: scanMove 8s linear infinite; pointer-events: none;
+  }
+  @keyframes scanMove { 0% { top: 48px; } 100% { top: 100vh; } }
+
+  .map-coords {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 500; font-size: 10px; color: var(--text-dim);
+    background: var(--bg-panel); padding: 4px 16px; border-radius: 12px;
+    border: 1px solid var(--border); backdrop-filter: blur(8px); letter-spacing: 2px;
+  }
+
+  .leaflet-control-zoom { border: 1px solid var(--border) !important; border-radius: 6px !important; overflow: hidden; }
+  .leaflet-control-zoom a { background: var(--bg-secondary) !important; color: var(--accent-cyan) !important; border-color: var(--border) !important; }
+  .leaflet-control-zoom a:hover { background: var(--bg-tertiary) !important; }
+
+  /* CONFIG MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--bg-secondary); border: 1px solid var(--border-bright);
+    border-radius: 12px; padding: 30px; width: 520px; max-width: 90vw;
+    box-shadow: 0 0 60px rgba(0,200,255,0.1);
+  }
+  .modal h2 {
+    font-family: 'Orbitron', sans-serif; font-size: 16px; color: var(--accent-cyan);
+    letter-spacing: 4px; margin-bottom: 6px;
+  }
+  .modal p { font-size: 11px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+  .modal label {
+    display: block; font-size: 10px; letter-spacing: 2px; color: var(--text-secondary);
+    text-transform: uppercase; margin-bottom: 6px; margin-top: 16px;
+  }
+  .modal input {
+    width: 100%; padding: 10px 14px; background: var(--bg-primary);
+    border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .modal input:focus { border-color: var(--accent-cyan); }
+  .modal input::placeholder { color: var(--text-dim); }
+  .modal-hint { font-size: 9px; color: var(--text-dim); margin-top: 4px; }
+  .modal-hint a { color: var(--accent-cyan); text-decoration: none; }
+  .modal-hint a:hover { text-decoration: underline; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .btn-primary {
+    flex: 1; padding: 10px; background: rgba(0,200,255,0.12); border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan); font-family: 'Orbitron', sans-serif; font-size: 11px;
+    letter-spacing: 2px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-primary:hover { background: rgba(0,200,255,0.2); }
+  .btn-secondary {
+    flex: 1; padding: 10px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-secondary); font-family: 'Orbitron', sans-serif; font-size: 11px;
+    letter-spacing: 2px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--text-secondary); }
+
+  .config-btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 4px 10px;
+    border: 1px solid rgba(0,200,255,0.3); background: rgba(0,200,255,0.08);
+    color: var(--accent-cyan); border-radius: 4px; cursor: pointer;
+    letter-spacing: 1px; transition: all 0.2s;
+  }
+  .config-btn:hover { background: rgba(0,200,255,0.15); }
+
+  /* Loading states */
+  .loading-msg {
+    text-align: center; padding: 20px; color: var(--text-dim); font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .loading-msg .spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--accent-cyan);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-msg {
+    text-align: center; padding: 12px; color: var(--accent-red); font-size: 10px;
+    background: rgba(255,51,102,0.05); border-radius: 6px; margin: 8px 0;
+  }
+
+  /* Flight cluster count */
+  .flight-count-overlay {
+    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+    z-index: 600; font-size: 10px; padding: 4px 14px; border-radius: 12px;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    backdrop-filter: blur(8px); color: var(--text-secondary); letter-spacing: 1px;
+  }
+
+  /* Debug log */
+  .debug-log {
+    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+    z-index: 900; width: 500px; max-height: 180px; overflow-y: auto;
+    background: rgba(10,14,23,0.95); border: 1px solid var(--border-bright);
+    border-radius: 8px; padding: 8px 12px; font-size: 10px;
+    color: var(--text-secondary); line-height: 1.6;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    backdrop-filter: blur(12px);
+  }
+  .debug-log.hidden { display: none; }
+  .debug-log .log-entry { border-bottom: 1px solid rgba(255,255,255,0.03); padding: 2px 0; }
+  .debug-log .log-time { color: var(--text-dim); margin-right: 8px; }
+  .debug-log .log-ok { color: var(--accent-green); }
+  .debug-log .log-warn { color: var(--accent-amber); }
+  .debug-log .log-err { color: var(--accent-red); }
+  .debug-log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .debug-log-header span { font-family: 'Orbitron', sans-serif; font-size: 9px; letter-spacing: 2px; color: var(--accent-cyan); }
+
+  /* Weather Panel */
+  .weather-panel {
+    position: fixed; z-index: 700; background: rgba(10,14,23,0.94);
+    border: 1px solid var(--border-bright); border-radius: 10px;
+    padding: 14px 18px; width: 380px; backdrop-filter: blur(14px);
+    pointer-events: auto; max-height: 80vh; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .weather-panel.hidden { display: none; }
+  .weather-panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .weather-panel-header h3 {
+    font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 2px;
+    color: var(--accent-cyan); margin: 0;
+  }
+  .weather-close {
+    background: none; border: none; color: var(--text-dim); cursor: pointer;
+    font-size: 16px; padding: 0 2px; line-height: 1;
+  }
+  .weather-close:hover { color: var(--text-primary); }
+  .weather-main {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+  }
+  .weather-icon { font-size: 38px; line-height: 1; }
+  .weather-temp {
+    font-family: 'Orbitron', sans-serif; font-size: 28px; font-weight: 700;
+    color: var(--text-primary); line-height: 1;
+  }
+  .weather-temp small { font-size: 14px; color: var(--text-secondary); font-weight: 400; }
+  .weather-desc {
+    font-size: 12px; color: var(--text-secondary); margin-top: 2px;
+  }
+  .weather-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px;
+    font-size: 11px; color: var(--text-secondary);
+  }
+  .weather-grid .wg-label { color: var(--text-dim); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+  .weather-grid .wg-value { color: var(--text-primary); font-weight: 500; }
+  .weather-forecast {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+    display: flex; gap: 6px; justify-content: space-between;
+  }
+  .weather-forecast-hour {
+    text-align: center; font-size: 10px; color: var(--text-secondary);
+  }
+  .weather-forecast-hour .wfh-temp { font-weight: 600; color: var(--text-primary); font-size: 11px; }
+  .weather-forecast-hour .wfh-icon { font-size: 16px; }
+  .weather-coords {
+    font-size: 9px; color: var(--text-dim); margin-top: 8px; letter-spacing: 0.5px;
+  }
+
+  /* Layer control */
+  .layer-control {
+    position: fixed; bottom: 26px; right: 14px; z-index: 600;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .layer-btn {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    color: var(--text-secondary); font-size: 9px; font-family: 'Orbitron', sans-serif;
+    letter-spacing: 1px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+  }
+  .layer-btn:hover { border-color: var(--border-bright); color: var(--text-primary); }
+  .layer-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+</style>
+</head>
+<body>
+
+<!-- CONFIG MODAL -->
+<div class="modal-overlay" id="configModal">
+  <div class="modal">
+    <h2>⚙ CONFIGURE</h2>
+    <p>
+      SENTINEL uses free APIs to fetch live data. Enter your API keys below.<br>
+      Flight data uses adsb.lol (free, no key needed, no rate limits).
+    </p>
+
+    <label>Finnhub API Key (stocks + news)</label>
+    <input type="text" id="finnhubKey" placeholder="e.g. csXXXXXXXXXXXXXXXXXX">
+    <div class="modal-hint">Free at <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a> — 60 calls/min</div>
+
+    <label>GNews API Key (regional news)</label>
+    <input type="text" id="gnewsKey" placeholder="e.g. a1b2c3d4e5f6g7h8i9j0">
+    <div class="modal-hint">Free at <a href="https://gnews.io" target="_blank">gnews.io</a> — 100 calls/day</div>
+
+    <label>TomTom API Key (live traffic overlay)</label>
+    <input type="text" id="tomtomKey" placeholder="e.g. AbCdEfGhIjKlMnOpQrStUvWxYz">
+    <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank">developer.tomtom.com</a> — 50k tiles/day</div>
+
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="saveConfig()">LAUNCH SENTINEL</button>
+      <button class="btn-secondary" onclick="skipConfig()">SKIP (SIMULATED DATA)</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="logo">SENTINEL</div>
+      <div class="logo-sub">Global Intelligence Platform</div>
+    </div>
+    <div class="panel-toggles">
+      <button class="toggle-btn active" data-panel="flights" onclick="togglePanel('flights',this)">✈ FLIGHTS</button>
+      <button class="toggle-btn active" data-panel="shipping" onclick="togglePanel('shipping',this)">🚢 SHIPPING</button>
+      <button class="toggle-btn active" data-panel="news" onclick="togglePanel('news',this)">📡 NEWS</button>
+      <button class="toggle-btn active" data-panel="stocks" onclick="togglePanel('stocks',this)">📈 STOCKS</button>
+      <button class="toggle-btn active" data-panel="satellites" onclick="togglePanel('satellites',this)">🛰 SATS</button>
+      <button class="toggle-btn" onclick="toggleTraffic(this)">🚗 TRAFFIC</button>
+    </div>
+  </div>
+  <div class="header-status">
+    <span id="feedStatus"><span class="status-dot off"></span>OFFLINE</span>
+    <button class="config-btn" onclick="showConfig()">⚙ CONFIG</button>
+    <button class="config-btn" onclick="document.getElementById('debugLog').classList.toggle('hidden')" style="font-size:8px;">🔍 LOG</button>
+    <span id="utcTime" class="header-time">--:--:-- UTC</span>
+  </div>
+</div>
+
+<div class="scanline"></div>
+
+<!-- DEBUG LOG -->
+<div class="debug-log hidden" id="debugLog">
+  <div class="debug-log-header">
+    <span>🔍 OPENSKY DEBUG</span>
+    <button onclick="document.getElementById('debugLog').classList.add('hidden')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;">✕</button>
+  </div>
+  <div id="debugEntries"></div>
+</div>
+
+<div id="map"></div>
+
+<!-- WEATHER PANEL (positioned dynamically) -->
+<div class="weather-panel hidden" id="weatherPanel">
+  <div class="weather-panel-header">
+    <h3>🌤 WEATHER INTEL</h3>
+    <button class="weather-close" onclick="document.getElementById('weatherPanel').classList.add('hidden')">✕</button>
+  </div>
+  <div id="weatherContent">
+    <div class="loading-msg"><span class="spinner"></span>Fetching weather data...</div>
+  </div>
+</div>
+
+<!-- LAYER CONTROL -->
+<div class="layer-control">
+  <button class="layer-btn active" onclick="switchLayer(0, this)" title="Dark minimal tiles">DARK</button>
+  <button class="layer-btn" onclick="switchLayer(1, this)" title="Street detail with buildings & POIs">STREET</button>
+  <button class="layer-btn" onclick="switchLayer(2, this)" title="Satellite imagery">SAT</button>
+</div>
+
+<!-- PANELS -->
+<div class="panel panel-flights" id="panelFlights">
+  <div class="panel-header">
+    <span class="panel-title">✈ Flight Tracker</span>
+    <span class="panel-badge badge-count" id="flightCount">— TRACKED</span>
+    <span class="panel-badge badge-sim" id="flightAuthBadge" style="font-size:8px;">ANON</span>
+  </div>
+  <div class="panel-body" id="flightList" style="max-height: calc(50vh - 120px);">
+    <div class="loading-msg">Waiting for config...</div>
+  </div>
+</div>
+
+<div class="panel panel-shipping" id="panelShipping">
+  <div class="panel-header">
+    <span class="panel-title">🚢 Maritime Traffic</span>
+    <span class="panel-badge badge-sim" id="shipBadge">SIMULATED</span>
+  </div>
+  <div class="panel-body" id="shipList" style="max-height: calc(50vh - 120px);"></div>
+</div>
+
+<div class="panel panel-news" id="panelNews">
+  <div class="panel-header">
+    <span class="panel-title">📡 Intelligence Feed</span>
+    <span class="panel-badge badge-count" id="newsRegionLabel">GLOBAL</span>
+  </div>
+  <div class="region-selector" id="regionSelector"></div>
+  <div class="panel-body" id="newsList" style="max-height: calc(50vh - 170px);">
+    <div class="loading-msg">Waiting for config...</div>
+  </div>
+</div>
+
+<div class="panel panel-stocks" id="panelStocks">
+  <div class="panel-header">
+    <span class="panel-title">📈 Market Feed</span>
+    <span class="panel-badge badge-count" id="marketStatus">—</span>
+  </div>
+  <div class="panel-body" id="stockList" style="max-height: calc(50vh - 120px);">
+    <div class="loading-msg">Waiting for config...</div>
+  </div>
+</div>
+
+<div class="panel panel-satellites" id="panelSatellites">
+  <div class="panel-header">
+    <span class="panel-title">🛰 Satellite Tracker</span>
+    <span class="panel-badge badge-count" id="satCount">— TRACKED</span>
+  </div>
+  <div class="panel-body" id="satList" style="max-height: calc(50vh - 120px);">
+    <div class="loading-msg"><span class="spinner"></span>Loading satellite TLEs...</div>
+  </div>
+</div>
+
+<div class="map-coords" id="mapCoords">LAT 0.000 — LNG 0.000 — ZOOM 3</div>
+
+<script>
+// ==================== STATE ====================
+const CONFIG = { finnhubKey: null, gnewsKey: null, tomtomKey: null, mode: 'offline' };
+let flightMarkers = [];
+let flightTrails = {};
+let shipMarkers = [];
+let liveFlightData = [];
+let newsData = [];
+let stocksData = {};
+let stockHistories = {};
+
+const TRACKED_STOCKS = [
+  { symbol: 'AAPL', name: 'Apple Inc.' },
+  { symbol: 'MSFT', name: 'Microsoft' },
+  { symbol: 'NVDA', name: 'NVIDIA Corp.' },
+  { symbol: 'GOOGL', name: 'Alphabet' },
+  { symbol: 'AMZN', name: 'Amazon' },
+  { symbol: 'TSLA', name: 'Tesla Inc.' },
+  { symbol: 'META', name: 'Meta Platforms' },
+];
+
+// ==================== MAP ====================
+const map = L.map('map', {
+  center: [25, 10], zoom: 3, minZoom: 2, maxZoom: 18,
+  zoomControl: true, attributionControl: false
+});
+
+// ==================== MAP TILE LAYERS ====================
+const tileLayers = [
+  // 0: DARK — CartoDB Dark Matter (current)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 20
+  }),
+  // 1: STREET — OSM with dark CSS filter (full detail: buildings, shops, POIs)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, className: 'dark-tiles'
+  }),
+  // 2: SATELLITE — Esri World Imagery (free, no key)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19
+  })
+];
+
+let activeLayer = tileLayers[0];
+activeLayer.addTo(map);
+
+function switchLayer(idx, btn) {
+  map.removeLayer(activeLayer);
+  activeLayer = tileLayers[idx];
+  activeLayer.addTo(map);
+  // Move tile layer below markers
+  activeLayer.setZIndex(0);
+  // Update button states
+  document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Dark-tiles CSS class filter (applied to OSM street tiles)
+const darkTileStyle = document.createElement('style');
+darkTileStyle.textContent = `
+  .dark-tiles {
+    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+  }
+`;
+document.head.appendChild(darkTileStyle);
+
+map.on('mousemove', (e) => {
+  document.getElementById('mapCoords').textContent =
+    `LAT ${e.latlng.lat.toFixed(3)} — LNG ${e.latlng.lng.toFixed(3)} — ZOOM ${map.getZoom()}`;
+});
+
+// ==================== TRAFFIC OVERLAY (TomTom Raster Flow Tiles) ====================
+let trafficLayer = null;
+let trafficActive = false;
+
+function toggleTraffic(btn) {
+  trafficActive = !trafficActive;
+  btn.classList.toggle('active', trafficActive);
+
+  if (trafficActive) {
+    if (!CONFIG.tomtomKey) {
+      // Show a hint
+      debugLog('No TomTom key — traffic overlay unavailable', 'warn');
+      btn.classList.remove('active');
+      trafficActive = false;
+      return;
+    }
+    trafficLayer = L.tileLayer(
+      `https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${CONFIG.tomtomKey}&tileSize=256`,
+      { attribution: '© TomTom', maxZoom: 18, opacity: 0.7, zIndex: 400 }
+    );
+    trafficLayer.addTo(map);
+    debugLog('Traffic overlay enabled (TomTom flow tiles)', 'ok');
+  } else {
+    if (trafficLayer) { map.removeLayer(trafficLayer); trafficLayer = null; }
+    debugLog('Traffic overlay disabled', 'ok');
+  }
+}
+
+// ==================== SATELLITE TRACKER (ISS + Notable Sats via SGP4) ====================
+let satMarkers = [];
+let satData = [];
+let issOrbitLine = null;
+let satTleCache = [];
+
+// Notable satellites to track (NORAD IDs)
+const NOTABLE_SATS = [
+  { norad: 25544, name: 'ISS (ZARYA)', type: 'Station', icon: '🏠' },
+  { norad: 48274, name: 'CSS (TIANHE)', type: 'Station', icon: '🏠' },
+  { norad: 36516, name: 'GOES-15', type: 'Weather', icon: '🌤' },
+  { norad: 43226, name: 'GOES-17', type: 'Weather', icon: '🌤' },
+  { norad: 29155, name: 'TERRA', type: 'Earth Obs', icon: '🌍' },
+  { norad: 27424, name: 'AQUA', type: 'Earth Obs', icon: '🌊' },
+  { norad: 25994, name: 'LANDSAT 7', type: 'Earth Obs', icon: '📷' },
+  { norad: 39084, name: 'LANDSAT 8', type: 'Earth Obs', icon: '📷' },
+  { norad: 28654, name: 'NOAA 18', type: 'Weather', icon: '🌤' },
+  { norad: 33591, name: 'NOAA 19', type: 'Weather', icon: '🌤' },
+  { norad: 20580, name: 'HST (HUBBLE)', type: 'Telescope', icon: '🔭' },
+  { norad: 43013, name: 'STARLINK-1007', type: 'Comms', icon: '📡' },
+];
+
+async function fetchSatelliteTLEs() {
+  debugLog('Fetching satellite TLE data from CelesTrak...', 'ok');
+  const satListEl = document.getElementById('satList');
+  try {
+    // Fetch active stations + weather + science sats via CelesTrak GP data
+    const groups = ['stations', 'weather', 'science', 'resource'];
+    let allTles = [];
+
+    for (const group of groups) {
+      try {
+        const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
+        const res = await corsFetch(url);
+        if (res) {
+          const lines = res.split('\n').filter(l => l.trim());
+          for (let i = 0; i < lines.length - 2; i += 3) {
+            const name = lines[i].trim();
+            const tle1 = lines[i+1].trim();
+            const tle2 = lines[i+2].trim();
+            if (tle1.startsWith('1') && tle2.startsWith('2')) {
+              const norad = parseInt(tle1.substring(2, 7));
+              allTles.push({ name, tle1, tle2, norad });
+            }
+          }
+        }
+      } catch (e) {
+        debugLog(`CelesTrak group ${group} failed: ${e.message}`, 'warn');
+      }
+    }
+
+    if (allTles.length === 0) {
+      // Fallback: use ISS-only from wheretheiss.at
+      debugLog('CelesTrak failed, falling back to ISS-only tracking', 'warn');
+      await fetchISSOnly();
+      return;
+    }
+
+    satTleCache = allTles;
+    debugLog(`✓ Loaded ${allTles.length} TLEs from CelesTrak`, 'ok');
+
+    // Filter to notable sats we want to display
+    propagateAndDisplaySats();
+
+  } catch (err) {
+    debugLog(`Satellite TLE fetch error: ${err.message}`, 'err');
+    await fetchISSOnly();
+  }
+}
+
+async function corsFetch(url) {
+  // Try direct, then proxies
+  const attempts = [
+    url,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?${encodeURIComponent(url)}`
+  ];
+  for (const u of attempts) {
+    try {
+      const res = await fetch(u);
+      if (res.ok) return await res.text();
+    } catch (e) { continue; }
+  }
+  return null;
+}
+
+function propagateAndDisplaySats() {
+  const now = new Date();
+  const displayed = [];
+
+  // Match notable sats by NORAD ID
+  for (const notable of NOTABLE_SATS) {
+    const tle = satTleCache.find(t => t.norad === notable.norad);
+    if (!tle) continue;
+
+    try {
+      const satrec = satellite.twoline2satrec(tle.tle1, tle.tle2);
+      const posVel = satellite.propagate(satrec, now);
+      if (!posVel || !posVel.position) continue;
+
+      const gmst = satellite.gstime(now);
+      const geo = satellite.eciToGeodetic(posVel.position, gmst);
+      const lat = satellite.degreesLat(geo.latitude);
+      const lng = satellite.degreesLong(geo.longitude);
+      const alt = geo.height; // km
+      const vel = Math.sqrt(posVel.velocity.x**2 + posVel.velocity.y**2 + posVel.velocity.z**2);
+
+      displayed.push({
+        ...notable,
+        lat, lng,
+        alt: Math.round(alt),
+        velocity: Math.round(vel * 3600), // km/s to km/h
+        satrec
+      });
+    } catch (e) { continue; }
+  }
+
+  // Also pick some random active sats for flavor (up to 8 extras)
+  const notableNorads = new Set(NOTABLE_SATS.map(n => n.norad));
+  const extras = satTleCache.filter(t => !notableNorads.has(t.norad)).slice(0, 200);
+  let extraCount = 0;
+  for (const tle of extras) {
+    if (extraCount >= 8) break;
+    try {
+      const satrec = satellite.twoline2satrec(tle.tle1, tle.tle2);
+      const posVel = satellite.propagate(satrec, now);
+      if (!posVel || !posVel.position) continue;
+      const gmst = satellite.gstime(now);
+      const geo = satellite.eciToGeodetic(posVel.position, gmst);
+      const lat = satellite.degreesLat(geo.latitude);
+      const lng = satellite.degreesLong(geo.longitude);
+      const alt = geo.height;
+      if (alt < 100 || alt > 50000) continue;
+      const vel = Math.sqrt(posVel.velocity.x**2 + posVel.velocity.y**2 + posVel.velocity.z**2);
+      displayed.push({
+        norad: tle.norad, name: tle.name.substring(0, 20), type: 'Active',
+        icon: '🛰', lat, lng, alt: Math.round(alt), velocity: Math.round(vel * 3600), satrec
+      });
+      extraCount++;
+    } catch (e) { continue; }
+  }
+
+  satData = displayed;
+  updateSatMarkers();
+  renderSatList();
+  if (displayed.length > 0) drawISSOrbit(displayed.find(s => s.norad === 25544));
+}
+
+async function fetchISSOnly() {
+  try {
+    const url = 'https://api.wheretheiss.at/v1/satellites/25544';
+    const text = await corsFetch(url);
+    if (!text) throw new Error('All sources failed');
+    const data = JSON.parse(text);
+    satData = [{
+      norad: 25544, name: 'ISS (ZARYA)', type: 'Station', icon: '🏠',
+      lat: data.latitude, lng: data.longitude,
+      alt: Math.round(data.altitude), velocity: Math.round(data.velocity)
+    }];
+    updateSatMarkers();
+    renderSatList();
+    debugLog('✓ ISS position from wheretheiss.at', 'ok');
+  } catch (err) {
+    debugLog(`ISS fallback also failed: ${err.message}`, 'err');
+    document.getElementById('satList').innerHTML = '<div class="error-msg">Satellite data unavailable</div>';
+  }
+}
+
+function updateSatMarkers() {
+  satMarkers.forEach(m => map.removeLayer(m));
+  satMarkers = [];
+
+  satData.forEach(s => {
+    const isISS = s.norad === 25544;
+    const icon = L.divIcon({
+      html: `<div style="font-size:${isISS ? 22 : 16}px; filter: drop-shadow(0 0 ${isISS ? 8 : 4}px rgba(136,85,255,0.8));">${isISS ? '🛸' : s.icon}</div>`,
+      className: '', iconSize: [22, 22], iconAnchor: [11, 11]
+    });
+    const marker = L.marker([s.lat, s.lng], { icon, zIndexOffset: isISS ? 1000 : 500 }).addTo(map);
+    marker.bindTooltip(
+      `${s.icon} <b>${s.name}</b><br>Alt: ${s.alt.toLocaleString()} km · ${s.velocity.toLocaleString()} km/h<br>Type: ${s.type} · NORAD ${s.norad}`,
+      { direction: 'top', offset: [0, -10] }
+    );
+    marker.on('click', () => map.flyTo([s.lat, s.lng], 4, { duration: 1 }));
+    satMarkers.push(marker);
+  });
+
+  document.getElementById('satCount').textContent = `${satData.length} TRACKED`;
+}
+
+function drawISSOrbit(iss) {
+  if (issOrbitLine) map.removeLayer(issOrbitLine);
+  if (!iss || !iss.satrec) return;
+
+  // Propagate ISS orbit ~90 minutes ahead (one full orbit)
+  const points = [];
+  const now = new Date();
+  for (let m = 0; m <= 92; m += 1) {
+    const t = new Date(now.getTime() + m * 60000);
+    try {
+      const pv = satellite.propagate(iss.satrec, t);
+      if (!pv || !pv.position) continue;
+      const gmst = satellite.gstime(t);
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      const lat = satellite.degreesLat(geo.latitude);
+      const lng = satellite.degreesLong(geo.longitude);
+      points.push([lat, lng]);
+    } catch (e) { continue; }
+  }
+
+  // Split at antimeridian crossings
+  const segments = [[]];
+  for (let i = 0; i < points.length; i++) {
+    segments[segments.length - 1].push(points[i]);
+    if (i < points.length - 1 && Math.abs(points[i][1] - points[i+1][1]) > 180) {
+      segments.push([]);
+    }
+  }
+
+  issOrbitLine = L.layerGroup();
+  segments.forEach(seg => {
+    if (seg.length > 1) {
+      L.polyline(seg, { color: '#00ff88', weight: 1.5, dashArray: '6 4', opacity: 0.4 }).addTo(issOrbitLine);
+    }
+  });
+  issOrbitLine.addTo(map);
+}
+
+function renderSatList() {
+  const html = satData.map(s => {
+    const isISS = s.norad === 25544;
+    return `<div class="sat-item ${isISS ? 'iss-item' : ''}" onclick="map.flyTo([${s.lat},${s.lng}], 4, {duration: 1})">
+      <div class="sat-icon">${isISS ? '🛸' : s.icon}</div>
+      <div class="flight-info">
+        <div class="sat-name ${isISS ? 'iss' : ''}">${s.name}</div>
+        <div class="sat-detail">${s.type} · NORAD ${s.norad} · ${s.velocity.toLocaleString()} km/h</div>
+      </div>
+      <div class="sat-alt"><span>${s.alt.toLocaleString()}</span> km</div>
+    </div>`;
+  }).join('');
+  document.getElementById('satList').innerHTML = html || '<div class="loading-msg">No satellites resolved</div>';
+}
+
+function updateSatPositions() {
+  const now = new Date();
+  satData.forEach((s, i) => {
+    if (!s.satrec) return;
+    try {
+      const pv = satellite.propagate(s.satrec, now);
+      if (!pv || !pv.position) return;
+      const gmst = satellite.gstime(now);
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      s.lat = satellite.degreesLat(geo.latitude);
+      s.lng = satellite.degreesLong(geo.longitude);
+      s.alt = Math.round(geo.height);
+      const vel = Math.sqrt(pv.velocity.x**2 + pv.velocity.y**2 + pv.velocity.z**2);
+      s.velocity = Math.round(vel * 3600);
+      if (satMarkers[i]) satMarkers[i].setLatLng([s.lat, s.lng]);
+    } catch (e) {}
+  });
+}
+
+// ==================== WEATHER ON CLICK (Open-Meteo + Wikipedia Location) ====================
+const WMO_CODES = {
+  0: ['☀️', 'Clear sky'], 1: ['🌤', 'Mainly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Overcast'],
+  45: ['🌫', 'Fog'], 48: ['🌫', 'Rime fog'],
+  51: ['🌦', 'Light drizzle'], 53: ['🌦', 'Moderate drizzle'], 55: ['🌧', 'Dense drizzle'],
+  56: ['🌧', 'Freezing drizzle'], 57: ['🌧', 'Dense freezing drizzle'],
+  61: ['🌧', 'Slight rain'], 63: ['🌧', 'Moderate rain'], 65: ['🌧', 'Heavy rain'],
+  66: ['🌧', 'Freezing rain'], 67: ['🌧', 'Heavy freezing rain'],
+  71: ['🌨', 'Slight snow'], 73: ['🌨', 'Moderate snow'], 75: ['❄️', 'Heavy snow'],
+  77: ['❄️', 'Snow grains'],
+  80: ['🌦', 'Slight showers'], 81: ['🌦', 'Moderate showers'], 82: ['⛈', 'Violent showers'],
+  85: ['🌨', 'Slight snow showers'], 86: ['🌨', 'Heavy snow showers'],
+  95: ['⛈', 'Thunderstorm'], 96: ['⛈', 'Thunderstorm + hail'], 99: ['⛈', 'Thunderstorm + heavy hail']
+};
+
+let weatherClickMarker = null;
+
+map.on('click', async (e) => {
+  // Don't trigger weather if clicking a flight/ship marker
+  if (e.originalEvent && e.originalEvent.target.closest && e.originalEvent.target.closest('.leaflet-marker-icon')) return;
+
+  const { lat, lng } = e.latlng;
+  const panel = document.getElementById('weatherPanel');
+  const content = document.getElementById('weatherContent');
+
+  // Position panel near click (convert to pixel)
+  const px = map.latLngToContainerPoint(e.latlng);
+  const mapRect = document.getElementById('map').getBoundingClientRect();
+  let left = mapRect.left + px.x + 20;
+  let top = mapRect.top + px.y - 100;
+  // Keep panel on screen
+  if (left + 360 > window.innerWidth) left = window.innerWidth - 370;
+  if (top < 60) top = 60;
+  if (top + 500 > window.innerHeight) top = window.innerHeight - 510;
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+
+  panel.classList.remove('hidden');
+  content.innerHTML = '<div class="loading-msg"><span class="spinner"></span>Fetching weather & location data...</div>';
+
+  // Drop a temporary marker
+  if (weatherClickMarker) map.removeLayer(weatherClickMarker);
+  weatherClickMarker = L.circleMarker([lat, lng], {
+    radius: 6, color: '#00c8ff', fillColor: '#00c8ff', fillOpacity: 0.3, weight: 2
+  }).addTo(map);
+
+  try {
+    // Fetch weather and location info in parallel
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure&hourly=temperature_2m,weather_code&forecast_hours=8&temperature_unit=celsius&wind_speed_unit=kmh`;
+
+    const [weatherRes, locationInfo] = await Promise.allSettled([
+      fetch(weatherUrl).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+      fetchLocationInfo(lat, lng)
+    ]);
+
+    if (weatherRes.status !== 'fulfilled') throw new Error('Weather fetch failed');
+    const data = weatherRes.value;
+    const c = data.current;
+    const wmo = WMO_CODES[c.weather_code] || ['❓', 'Unknown'];
+    const loc = locationInfo.status === 'fulfilled' ? locationInfo.value : null;
+
+    // Wind direction to compass
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    const windDir = dirs[Math.round(c.wind_direction_10m / 22.5) % 16];
+
+    // Build hourly forecast (next 8 hours)
+    let forecastHtml = '';
+    if (data.hourly && data.hourly.time) {
+      const hours = data.hourly.time.slice(0, 8);
+      const temps = data.hourly.temperature_2m.slice(0, 8);
+      const codes = data.hourly.weather_code.slice(0, 8);
+      forecastHtml = hours.map((t, i) => {
+        const hr = new Date(t).getHours().toString().padStart(2, '0') + ':00';
+        const ico = (WMO_CODES[codes[i]] || ['·'])[0];
+        return `<div class="weather-forecast-hour">
+          <div>${hr}</div>
+          <div class="wfh-icon">${ico}</div>
+          <div class="wfh-temp">${Math.round(temps[i])}°</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Build location section
+    let locationHtml = '';
+    if (loc && loc.name) {
+      locationHtml = `<div class="weather-location">
+        <div class="weather-location-name">${loc.name}</div>
+        ${loc.region ? `<div class="weather-location-region">${loc.region}</div>` : ''}
+        ${loc.summary ? `<div class="weather-wiki-summary">${loc.summary}</div>` : ''}
+        ${loc.wikiUrl ? `<a class="weather-wiki-link" href="${loc.wikiUrl}" target="_blank">📖 Read more on Wikipedia →</a>` : ''}
+      </div>`;
+    }
+
+    content.innerHTML = `
+      ${locationHtml}
+      <div class="weather-main">
+        <div class="weather-icon">${wmo[0]}</div>
+        <div>
+          <div class="weather-temp">${Math.round(c.temperature_2m)}°<small>C</small></div>
+          <div class="weather-desc">${wmo[1]}</div>
+        </div>
+      </div>
+      <div class="weather-grid">
+        <div><span class="wg-label">Feels like</span><br><span class="wg-value">${Math.round(c.apparent_temperature)}°C</span></div>
+        <div><span class="wg-label">Humidity</span><br><span class="wg-value">${c.relative_humidity_2m}%</span></div>
+        <div><span class="wg-label">Wind</span><br><span class="wg-value">${Math.round(c.wind_speed_10m)} km/h ${windDir}</span></div>
+        <div><span class="wg-label">Gusts</span><br><span class="wg-value">${Math.round(c.wind_gusts_10m)} km/h</span></div>
+        <div><span class="wg-label">Pressure</span><br><span class="wg-value">${Math.round(c.surface_pressure)} hPa</span></div>
+        <div><span class="wg-label">Precip</span><br><span class="wg-value">${c.precipitation} mm</span></div>
+      </div>
+      ${forecastHtml ? `<div class="weather-forecast">${forecastHtml}</div>` : ''}
+      <div class="weather-coords">${lat.toFixed(4)}°N ${lng.toFixed(4)}°E · Open-Meteo${loc ? ' + Wikipedia' : ''}</div>
+    `;
+  } catch (err) {
+    content.innerHTML = `<div class="error-msg">Weather fetch failed: ${err.message}</div>`;
+  }
+});
+
+// Fetch nearest city/town info from Wikipedia
+async function fetchLocationInfo(lat, lng) {
+  try {
+    // Step 1: Wikipedia geosearch to find nearest article
+    const geoUrl = `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=10000&gslimit=3&format=json&origin=*`;
+    const geoRes = await fetch(geoUrl);
+    if (!geoRes.ok) return null;
+    const geoData = await geoRes.json();
+
+    if (!geoData.query || !geoData.query.geosearch || geoData.query.geosearch.length === 0) {
+      // Try larger radius
+      const geoUrl2 = `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=50000&gslimit=1&format=json&origin=*`;
+      const geoRes2 = await fetch(geoUrl2);
+      if (!geoRes2.ok) return null;
+      const geoData2 = await geoRes2.json();
+      if (!geoData2.query?.geosearch?.length) return null;
+      return await fetchPageSummary(geoData2.query.geosearch[0]);
+    }
+
+    // Pick the first result (nearest)
+    const nearest = geoData.query.geosearch[0];
+    return await fetchPageSummary(nearest);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchPageSummary(page) {
+  try {
+    // Use the REST API summary endpoint for clean extracts
+    const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page.title)}`;
+    const sumRes = await fetch(summaryUrl);
+    if (!sumRes.ok) return { name: page.title, wikiUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}` };
+    const sumData = await sumRes.json();
+
+    // Extract region from description
+    let region = sumData.description || '';
+    if (region.length > 80) region = region.substring(0, 80) + '...';
+
+    // Truncate summary to ~2 sentences
+    let summary = sumData.extract || '';
+    const sentences = summary.match(/[^.!?]+[.!?]+/g) || [];
+    if (sentences.length > 2) summary = sentences.slice(0, 2).join('').trim();
+    if (summary.length > 300) summary = summary.substring(0, 300) + '...';
+
+    return {
+      name: sumData.title || page.title,
+      region,
+      summary,
+      wikiUrl: sumData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}`
+    };
+  } catch (e) {
+    return { name: page.title };
+  }
+}
+
+// ==================== CLOCK ====================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('utcTime').textContent = now.toUTCString().slice(17, 25) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ==================== PANEL TOGGLE ====================
+const panelIds = { flights: 'panelFlights', shipping: 'panelShipping', news: 'panelNews', stocks: 'panelStocks', satellites: 'panelSatellites' };
+
+function togglePanel(name, btn) {
+  const panel = document.getElementById(panelIds[name]);
+  panel.classList.toggle('hidden');
+  btn.classList.toggle('active');
+}
+
+// ==================== CONFIG ====================
+function showConfig() { document.getElementById('configModal').classList.remove('hidden'); }
+
+function saveConfig() {
+  CONFIG.finnhubKey = document.getElementById('finnhubKey').value.trim() || null;
+  CONFIG.gnewsKey = document.getElementById('gnewsKey').value.trim() || null;
+  CONFIG.tomtomKey = document.getElementById('tomtomKey').value.trim() || null;
+  CONFIG.mode = 'live';
+  document.getElementById('configModal').classList.add('hidden');
+  startLiveFeeds();
+}
+
+function skipConfig() {
+  CONFIG.mode = 'simulated';
+  document.getElementById('configModal').classList.add('hidden');
+  startSimulatedFeeds();
+}
+
+function updateStatus(mode) {
+  const el = document.getElementById('feedStatus');
+  if (mode === 'live') {
+    el.innerHTML = '<span class="status-dot live"></span>LIVE FEED';
+  } else if (mode === 'partial') {
+    el.innerHTML = '<span class="status-dot sim"></span>PARTIAL LIVE';
+  } else if (mode === 'simulated') {
+    el.innerHTML = '<span class="status-dot sim"></span>SIMULATED';
+  }
+}
+
+// ==================== LIVE FEEDS ====================
+async function startLiveFeeds() {
+  updateStatus('live');
+  debugLog('SENTINEL starting live feeds...', 'ok');
+  debugLog('Flight source: adsb.lol (free, no auth, no rate limits)', 'ok');
+
+  fetchFlights();
+  setInterval(fetchFlights, 10000); // 10s refresh
+
+  if (CONFIG.finnhubKey) {
+    fetchStocks();
+    setInterval(fetchStocks, 30000);
+    fetchFinnhubNews();
+    setInterval(fetchFinnhubNews, 120000);
+  } else {
+    document.getElementById('stockList').innerHTML = '<div class="error-msg">No Finnhub key — stocks unavailable</div>';
+    updateStatus('partial');
+  }
+
+  if (CONFIG.gnewsKey) {
+    fetchGNews();
+    setInterval(fetchGNews, 300000);
+  }
+
+  initShipping();
+  setInterval(animateShips, 3000);
+
+  // Satellites
+  fetchSatelliteTLEs();
+  setInterval(updateSatPositions, 5000);
+  setInterval(renderSatList, 10000);
+  setInterval(() => { const iss = satData.find(s => s.norad === 25544); if (iss) drawISSOrbit(iss); }, 60000);
+
+  // Traffic
+  if (CONFIG.tomtomKey) debugLog('TomTom key present — traffic overlay available via 🚗 button', 'ok');
+}
+
+function startSimulatedFeeds() {
+  updateStatus('simulated');
+  // adsb.lol works without any config — always try live flights
+  fetchFlights();
+  setInterval(fetchFlights, 10000);
+  initSimulatedStocks();
+  setInterval(tickSimulatedStocks, 3000);
+  initSimulatedNews();
+  initShipping();
+  setInterval(animateShips, 3000);
+
+  // Satellites work without config too
+  fetchSatelliteTLEs();
+  setInterval(updateSatPositions, 5000);
+  setInterval(renderSatList, 10000);
+  setInterval(() => { const iss = satData.find(s => s.norad === 25544); if (iss) drawISSOrbit(iss); }, 60000);
+}
+
+// ==================== DEBUG LOGGER ====================
+function debugLog(msg, level = 'ok') {
+  const el = document.getElementById('debugEntries');
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-${level}">${msg}</span>`;
+  el.prepend(entry);
+  while (el.children.length > 30) el.removeChild(el.lastChild);
+  console.log(`[SENTINEL ${level.toUpperCase()}] ${msg}`);
+}
+
+// ==================== FLIGHTS (adsb.lol — FREE, no auth, no rate limits) ====================
+let flightRefreshCountdown = 10;
+let flightCountdownInterval = null;
+let flightFetchInProgress = false;
+
+// We route through a CORS proxy since these APIs don't set Access-Control-Allow-Origin
+// for local file:// or sandboxed origins
+const CORS_PROXIES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
+const FLIGHT_SOURCES = [
+  { name: 'airplanes.live', buildUrl: (lat, lon, dist) => `https://api.airplanes.live/v2/point/${lat}/${lon}/${dist}` },
+  { name: 'adsb.lol', buildUrl: (lat, lon, dist) => `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}` },
+  { name: 'adsb.fi', buildUrl: (lat, lon, dist) => `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lon}/dist/${dist}` },
+];
+let activeFlightSource = 0;
+
+function startFlightCountdown() {
+  if (flightCountdownInterval) clearInterval(flightCountdownInterval);
+  flightRefreshCountdown = 10;
+  flightCountdownInterval = setInterval(() => {
+    flightRefreshCountdown--;
+    if (flightRefreshCountdown < 0) flightRefreshCountdown = 0;
+    const badge = document.getElementById('flightCount');
+    if (badge && liveFlightData.length > 0) {
+      badge.textContent = `${liveFlightData.length} TRACKED · ${flightRefreshCountdown}s`;
+    }
+  }, 1000);
+}
+
+// Fetch a single point through the proxy cascade, return raw aircraft array
+async function fetchPoint(lat, lon, dist, source) {
+  const rawUrl = source.buildUrl(lat.toFixed(2), lon.toFixed(2), dist);
+  const attempts = [
+    { label: 'direct', url: rawUrl },
+    ...CORS_PROXIES.map((fn, i) => ({ label: `proxy-${i}`, url: fn(rawUrl) }))
+  ];
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return { ok: true, ac: data.ac || data.aircraft || [], via: attempt.label };
+    } catch (e) {
+      continue;
+    }
+  }
+  return { ok: false, ac: [], via: 'none' };
+}
+
+// Build a grid of query points to cover the visible map bounds
+function buildQueryGrid(bounds) {
+  const s = bounds.getSouth(), n = bounds.getNorth();
+  const w = bounds.getWest(), e = bounds.getEast();
+  const latSpan = n - s;
+  const lonSpan = e - w;
+
+  // Each 250 NM query covers ~4.1° of latitude radius
+  // Use ~7° step (slight overlap) between grid points
+  const step = 7;
+
+  // At high zoom, a single center query at 250NM is more than enough
+  if (latSpan < 8 && lonSpan < 12) {
+    const cLat = (n + s) / 2;
+    const cLon = (e + w) / 2;
+    return [{ lat: cLat, lon: cLon }];
+  }
+
+  const points = [];
+  for (let lat = s + step / 2; lat < n + step / 2; lat += step) {
+    for (let lon = w + step / 2; lon < e + step / 2; lon += step) {
+      points.push({ lat: Math.min(Math.max(lat, -85), 85), lon });
+    }
+  }
+
+  // Cap at 9 queries to stay reasonable on proxy load
+  if (points.length > 9) {
+    // Evenly sample down to 9
+    const sampled = [];
+    const ratio = points.length / 9;
+    for (let i = 0; i < 9; i++) {
+      sampled.push(points[Math.floor(i * ratio)]);
+    }
+    return sampled;
+  }
+
+  return points.length > 0 ? points : [{ lat: (n + s) / 2, lon: (e + w) / 2 }];
+}
+
+async function fetchFlights() {
+  if (flightFetchInProgress) return;
+  flightFetchInProgress = true;
+
+  const bounds = map.getBounds();
+  const source = FLIGHT_SOURCES[activeFlightSource];
+  const queryPoints = buildQueryGrid(bounds);
+
+  if (liveFlightData.length === 0) {
+    document.getElementById('flightList').innerHTML = `<div class="loading-msg"><span class="spinner"></span>Fetching ADS-B via ${source.name} (${queryPoints.length} zone${queryPoints.length > 1 ? 's' : ''})...</div>`;
+  }
+
+  debugLog(`Fetching ${source.name}: ${queryPoints.length} query point(s) at 250nm each`);
+
+  try {
+    // Fire all grid points in parallel
+    const results = await Promise.allSettled(
+      queryPoints.map(p => fetchPoint(p.lat, p.lon, 250, source))
+    );
+
+    // Merge and deduplicate by hex
+    const merged = new Map();
+    let totalRaw = 0;
+    let successCount = 0;
+
+    results.forEach(r => {
+      if (r.status === 'fulfilled' && r.value.ok) {
+        successCount++;
+        r.value.ac.forEach(a => {
+          if (a.lat && a.lon && a.alt_baro !== 'ground' && a.hex) {
+            merged.set(a.hex, a);
+          }
+        });
+        totalRaw += r.value.ac.length;
+      }
+    });
+
+    if (merged.size === 0 && successCount > 0) {
+      document.getElementById('flightList').innerHTML = '<div class="loading-msg">No flights in view. Pan/zoom the map.</div>';
+      document.getElementById('flightCount').textContent = '0 TRACKED';
+      debugLog(`${source.name}: 0 aircraft across ${queryPoints.length} zones`, 'warn');
+      flightFetchInProgress = false;
+      startFlightCountdown();
+      return;
+    }
+
+    if (successCount === 0) {
+      // All queries failed — rotate source
+      activeFlightSource = (activeFlightSource + 1) % FLIGHT_SOURCES.length;
+      debugLog(`All ${queryPoints.length} queries failed. Rotating to ${FLIGHT_SOURCES[activeFlightSource].name}`, 'err');
+      if (liveFlightData.length === 0) {
+        document.getElementById('flightList').innerHTML = `<div class="error-msg">Failed. Trying ${FLIGHT_SOURCES[activeFlightSource].name} next...</div>`;
+      }
+      flightFetchInProgress = false;
+      return;
+    }
+
+    liveFlightData = Array.from(merged.values()).map(a => ({
+      icao24: a.hex || '',
+      callsign: (a.flight || a.r || '').trim(),
+      registration: (a.r || '').trim(),
+      type: (a.t || '').trim(),
+      typeDesc: (a.desc || '').trim(),
+      country: a.dbFlags ? '🏳️' : '',
+      lat: a.lat,
+      lng: a.lon,
+      alt: a.alt_baro || a.alt_geom || 0,
+      altMetric: false,
+      velocity: a.gs || 0,
+      heading: a.track || a.true_heading || 0,
+      vertRate: a.baro_rate || 0,
+      squawk: a.squawk || '',
+      category: a.category || '',
+      source: a.type || 'adsb'
+    }));
+
+    debugLog(`✓ ${liveFlightData.length} unique aircraft (${totalRaw} raw from ${successCount}/${queryPoints.length} zones) [${source.name}]`, 'ok');
+
+    updateFlightMarkers();
+    renderFlightList();
+    startFlightCountdown();
+  } catch (err) {
+    debugLog(`Fetch error: ${err.message}`, 'err');
+  }
+
+  flightFetchInProgress = false;
+}
+
+function createPlaneIcon(heading) {
+  return L.divIcon({
+    html: `<div style="transform: rotate(${heading || 0}deg); font-size: 18px; color: #00c8ff; filter: drop-shadow(0 0 5px rgba(0,200,255,0.7)); line-height:1;">✈</div>`,
+    className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+  });
+}
+
+function updateFlightMarkers() {
+  // Update source badge
+  const authBadge = document.getElementById('flightAuthBadge');
+  authBadge.textContent = FLIGHT_SOURCES[activeFlightSource].name.toUpperCase();
+  authBadge.className = 'panel-badge badge-live';
+
+  // Remove old markers
+  flightMarkers.forEach(m => map.removeLayer(m));
+  flightMarkers = [];
+
+  liveFlightData.forEach(f => {
+    const marker = L.marker([f.lat, f.lng], { icon: createPlaneIcon(f.heading) }).addTo(map);
+    const altFt = Math.round(f.alt || 0);
+    const spdKts = Math.round(f.velocity || 0);
+    const label = f.callsign || f.registration || f.icao24.toUpperCase();
+    const typeStr = f.type ? ` · ${f.type}` : '';
+    marker.bindTooltip(
+      `<b>${label}</b>${typeStr}<br>FL${Math.round(altFt/100)} · ${spdKts} kts${f.squawk ? ' · SQK ' + f.squawk : ''}`,
+      { direction: 'top', offset: [0, -10] }
+    );
+    marker.on('click', () => map.flyTo([f.lat, f.lng], 8, { duration: 1 }));
+    flightMarkers.push(marker);
+  });
+}
+
+function renderFlightList() {
+  const html = liveFlightData.slice(0, 50).map(f => {
+    const altFt = Math.round(f.alt || 0);
+    const spdKts = Math.round(f.velocity || 0);
+    const label = f.callsign || f.registration || f.icao24.toUpperCase();
+    const detail = [f.icao24, f.type, f.squawk ? 'SQK ' + f.squawk : ''].filter(Boolean).join(' · ');
+    return `
+      <div class="flight-item" onclick="map.flyTo([${f.lat},${f.lng}], 8, {duration: 1})">
+        <div class="flight-icon">✈</div>
+        <div class="flight-info">
+          <div class="flight-callsign">${label} <span style="color: var(--text-dim); font-weight: 400; font-size: 10px">${f.type || ''}</span></div>
+          <div class="flight-route">${detail}</div>
+        </div>
+        <div class="flight-alt">
+          FL${Math.round(altFt/100)}<br>
+          <span>${spdKts} kts</span>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('flightList').innerHTML = html;
+  document.getElementById('flightCount').textContent = `${liveFlightData.length} TRACKED`;
+}
+
+// ==================== STOCKS (Finnhub) ====================
+async function fetchStocks() {
+  if (!CONFIG.finnhubKey) return;
+
+  try {
+    const promises = TRACKED_STOCKS.map(s =>
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${CONFIG.finnhubKey}`)
+        .then(r => r.json())
+        .then(data => ({ symbol: s.symbol, name: s.name, data }))
+    );
+
+    const results = await Promise.all(promises);
+
+    results.forEach(r => {
+      if (r.data && r.data.c) {
+        stocksData[r.symbol] = {
+          symbol: r.symbol,
+          name: r.name,
+          price: r.data.c,
+          change: r.data.d || 0,
+          pct: r.data.dp || 0,
+          high: r.data.h,
+          low: r.data.l,
+          open: r.data.o,
+          prevClose: r.data.pc
+        };
+        if (!stockHistories[r.symbol]) stockHistories[r.symbol] = [];
+        stockHistories[r.symbol].push(r.data.c);
+        if (stockHistories[r.symbol].length > 30) stockHistories[r.symbol].shift();
+      }
+    });
+
+    renderStockList();
+    document.getElementById('marketStatus').textContent = 'LIVE';
+    document.getElementById('marketStatus').className = 'panel-badge badge-live';
+  } catch (err) {
+    console.error('Stock fetch error:', err);
+    document.getElementById('stockList').innerHTML = `<div class="error-msg">Finnhub error: ${err.message}</div>`;
+  }
+}
+
+function renderStockList() {
+  const symbols = Object.keys(stocksData);
+  if (symbols.length === 0) return;
+
+  const html = symbols.map((sym, i) => {
+    const s = stocksData[sym];
+    const isUp = s.change >= 0;
+    const colorClass = isUp ? 'stock-up' : 'stock-down';
+    const arrow = isUp ? '▲' : '▼';
+    return `
+      <div class="stock-item">
+        <div class="stock-left">
+          <div>
+            <div class="stock-symbol">${s.symbol}</div>
+            <div class="stock-name">${s.name}</div>
+          </div>
+        </div>
+        <div class="stock-right">
+          <div class="stock-price ${colorClass}">$${s.price.toFixed(2)}</div>
+          <div class="stock-change ${colorClass}">${arrow} ${Math.abs(s.change).toFixed(2)} (${Math.abs(s.pct).toFixed(2)}%)</div>
+          <div class="stock-sparkline"><canvas id="spark-${i}" style="width:100px;height:28px;"></canvas></div>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('stockList').innerHTML = html;
+
+  // Draw sparklines
+  symbols.forEach((sym, i) => {
+    const canvas = document.getElementById(`spark-${i}`);
+    const history = stockHistories[sym] || [];
+    if (canvas && history.length > 1) drawSparkline(canvas, history, stocksData[sym].change >= 0);
+  });
+}
+
+// ==================== NEWS (Finnhub + GNews) ====================
+const regions = [
+  { id: 'global', label: 'GLOBAL', bounds: null },
+  { id: 'namerica', label: 'N. AMERICA', bounds: [[15,-140],[72,-50]], gnewsCountry: 'us' },
+  { id: 'europe', label: 'EUROPE', bounds: [[35,-10],[72,40]], gnewsCountry: 'gb' },
+  { id: 'meast', label: 'MID EAST', bounds: [[12,25],[42,65]], gnewsCountry: 'ae' },
+  { id: 'asia', label: 'ASIA PACIFIC', bounds: [[-10,60],[55,150]], gnewsCountry: 'jp' },
+  { id: 'africa', label: 'AFRICA', bounds: [[-35,-20],[37,55]], gnewsCountry: 'za' },
+];
+let currentRegion = 'global';
+
+function renderRegionSelector() {
+  const html = regions.map(r => `
+    <button class="region-btn ${r.id === currentRegion ? 'active' : ''}" onclick="selectRegion('${r.id}')">${r.label}</button>
+  `).join('');
+  document.getElementById('regionSelector').innerHTML = html;
+}
+renderRegionSelector();
+
+function selectRegion(id) {
+  currentRegion = id;
+  const region = regions.find(r => r.id === id);
+  document.getElementById('newsRegionLabel').textContent = region.label;
+  if (region.bounds) map.flyToBounds(region.bounds, { duration: 1.5, padding: [50, 50] });
+  renderRegionSelector();
+  renderNewsList();
+  // Fetch regional news if GNews key available
+  if (CONFIG.gnewsKey && region.gnewsCountry) fetchGNews(region.gnewsCountry);
+}
+
+async function fetchFinnhubNews() {
+  if (!CONFIG.finnhubKey) return;
+  try {
+    const res = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${CONFIG.finnhubKey}`);
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      const finnhubNews = data.slice(0, 15).map(n => ({
+        headline: n.headline,
+        source: (n.source || 'FINNHUB').toUpperCase(),
+        time: timeAgo(n.datetime * 1000),
+        url: n.url,
+        region: 'global',
+        severity: n.headline.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
+                  n.headline.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
+        origin: 'finnhub'
+      }));
+      // Merge with existing, dedup
+      newsData = [...finnhubNews, ...newsData.filter(n => n.origin !== 'finnhub')].slice(0, 40);
+      renderNewsList();
+    }
+  } catch (err) {
+    console.error('Finnhub news error:', err);
+  }
+}
+
+async function fetchGNews(country = 'us') {
+  if (!CONFIG.gnewsKey) return;
+  try {
+    const res = await fetch(`https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=${country}&max=10&apikey=${CONFIG.gnewsKey}`);
+    const data = await res.json();
+    if (data.articles) {
+      const regionId = regions.find(r => r.gnewsCountry === country)?.id || 'global';
+      const gnewsItems = data.articles.map(a => ({
+        headline: a.title,
+        source: (a.source?.name || 'GNEWS').toUpperCase(),
+        time: timeAgo(new Date(a.publishedAt).getTime()),
+        url: a.url,
+        region: regionId,
+        severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
+                  a.title.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
+        origin: 'gnews'
+      }));
+      newsData = [...gnewsItems, ...newsData.filter(n => n.origin !== 'gnews' || n.region !== regionId)].slice(0, 50);
+      renderNewsList();
+    }
+  } catch (err) {
+    console.error('GNews error:', err);
+  }
+}
+
+function renderNewsList() {
+  const filtered = currentRegion === 'global' ? newsData : newsData.filter(n => n.region === currentRegion || n.region === 'global');
+  if (filtered.length === 0) {
+    document.getElementById('newsList').innerHTML = '<div class="loading-msg">No news for this region yet.</div>';
+    return;
+  }
+  const html = filtered.map(n => `
+    <div class="news-item" onclick="${n.url ? `window.open('${n.url}','_blank')` : ''}">
+      <div class="news-meta">
+        <span class="news-source">${n.source}</span>
+        <span class="news-time">${n.time}</span>
+        <span class="news-region-tag">${(regions.find(r => r.id === n.region)?.label || 'GLOBAL')}</span>
+      </div>
+      <div class="news-headline">
+        <span class="news-severity severity-${n.severity}"></span>
+        ${n.headline}
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('newsList').innerHTML = html;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'JUST NOW';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs/24)}d ago`;
+}
+
+// ==================== SHIPPING (Simulated — no free AIS API) ====================
+const shipRoutes = [
+  { name: 'MSC OSCAR', imo: '9703318', type: 'Container', from: 'Shanghai', to: 'Rotterdam', waypoints: [[31.2,121.5],[22.3,114.2],[10.5,104.0],[5.3,73.8],[12.6,43.2],[30.5,32.3],[36.2,14.5],[37.0,-5.6],[51.9,4.5]], speed: 18, flag: '🇵🇦', teu: 19224, status: 'transit' },
+  { name: 'EVER GIVEN', imo: '9811000', type: 'Container', from: 'Felixstowe', to: 'Singapore', waypoints: [[51.9,1.3],[48.4,-5.2],[36.7,-6.0],[36.2,14.5],[31.5,32.3],[12.6,43.2],[5.3,73.8],[1.3,103.8]], speed: 14, flag: '🇵🇦', teu: 20124, status: 'transit' },
+  { name: 'HMM ALGECIRAS', imo: '9863297', type: 'Container', from: 'Busan', to: 'Los Angeles', waypoints: [[35.1,129.1],[35.5,140.3],[40.5,170.0],[37.8,-145.0],[33.7,-118.3]], speed: 21, flag: '🇰🇷', teu: 23964, status: 'transit' },
+  { name: 'MAERSK ESSEX', imo: '9458094', type: 'Container', from: 'Singapore', to: 'Felixstowe', waypoints: [[1.3,103.8],[5.3,73.8],[12.6,43.2],[30.5,32.3],[36.2,14.5],[48.4,-5.2],[51.9,1.3]], speed: 16, flag: '🇩🇰', teu: 13100, status: 'transit' },
+  { name: 'CMA CGM MARCO POLO', imo: '9454436', type: 'Container', from: 'Le Havre', to: 'Hong Kong', waypoints: [[49.5,0.1],[36.2,14.5],[31.5,32.3],[12.6,43.2],[5.3,73.8],[10.5,104.0],[22.3,114.2]], speed: 19, flag: '🇬🇧', teu: 16020, status: 'transit' },
+  { name: 'COSCO SHIPPING ARIES', imo: '9783473', type: 'Container', from: 'Piraeus', to: 'Ningbo', waypoints: [[37.9,23.6],[31.5,32.3],[12.6,43.2],[5.3,73.8],[10.5,104.0],[29.9,121.5]], speed: 15, flag: '🇨🇳', teu: 20119, status: 'delayed' },
+  { name: 'ONE INNOVATION', imo: '9894737', type: 'Container', from: 'Tokyo', to: 'Seattle', waypoints: [[35.6,139.8],[40.5,170.0],[45.8,-155.0],[47.6,-122.3]], speed: 20, flag: '🇯🇵', teu: 14000, status: 'transit' },
+  { name: 'NORDIC UNITY', imo: '9434765', type: 'Bulk Carrier', from: 'Newcastle', to: 'Hamburg', waypoints: [[55.0,-1.4],[54.0,4.0],[53.5,10.0]], speed: 0, flag: '🇳🇴', teu: 0, status: 'port' },
+];
+
+let shipPositions = [];
+
+function initShipping() {
+  shipPositions = shipRoutes.map(s => {
+    const progress = Math.random() * 0.8 + 0.1;
+    const wpIndex = Math.floor(progress * (s.waypoints.length - 1));
+    const frac = (progress * (s.waypoints.length - 1)) - wpIndex;
+    const from = s.waypoints[Math.min(wpIndex, s.waypoints.length - 1)];
+    const to = s.waypoints[Math.min(wpIndex + 1, s.waypoints.length - 1)];
+    return {
+      ...s,
+      lat: from[0] + (to[0] - from[0]) * frac,
+      lng: from[1] + (to[1] - from[1]) * frac,
+      wpIndex, frac, progress
+    };
+  });
+
+  const shipIcon = L.divIcon({
+    html: '<div style="font-size:18px; filter: drop-shadow(0 0 5px rgba(255,170,0,0.7));">🚢</div>',
+    className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+  });
+
+  shipPositions.forEach(s => {
+    const marker = L.marker([s.lat, s.lng], { icon: shipIcon }).addTo(map);
+    marker.bindTooltip(`${s.flag} <b>${s.name}</b><br>${s.from} → ${s.to}<br>${s.speed} kn · ${s.type}`, { direction: 'top', offset: [0, -10] });
+    marker.on('click', () => map.flyTo([s.lat, s.lng], 6, { duration: 1 }));
+    shipMarkers.push({ marker, data: s });
+  });
+
+  renderShipList();
+}
+
+function animateShips() {
+  shipPositions.forEach((s, i) => {
+    if (s.status === 'port') return;
+    s.progress += 0.001 * (s.speed / 20);
+    if (s.progress > 1) s.progress = 0;
+    const totalWp = s.waypoints.length - 1;
+    const wpIndex = Math.floor(s.progress * totalWp);
+    const frac = (s.progress * totalWp) - wpIndex;
+    const from = s.waypoints[Math.min(wpIndex, totalWp)];
+    const to = s.waypoints[Math.min(wpIndex + 1, totalWp)];
+    s.lat = from[0] + (to[0] - from[0]) * frac;
+    s.lng = from[1] + (to[1] - from[1]) * frac;
+    if (shipMarkers[i]) shipMarkers[i].marker.setLatLng([s.lat, s.lng]);
+  });
+  renderShipList();
+}
+
+function renderShipList() {
+  const html = shipPositions.map(s => `
+    <div class="ship-item" onclick="map.flyTo([${s.lat},${s.lng}], 6, {duration: 1})">
+      <div class="ship-icon">${s.flag}</div>
+      <div class="flight-info">
+        <div class="ship-name">${s.name}</div>
+        <div class="ship-detail">${s.from} → ${s.to} · ${s.speed} kn${s.teu ? ' · ' + s.teu.toLocaleString() + ' TEU' : ''}</div>
+      </div>
+      <span class="ship-status ${s.status}">${s.status.toUpperCase()}</span>
+    </div>
+  `).join('');
+  document.getElementById('shipList').innerHTML = html;
+}
+
+// ==================== SIMULATED STOCKS FALLBACK ====================
+const simStocks = [
+  { symbol: 'AAPL', name: 'Apple Inc.', price: 228.52, change: 1.34, pct: 0.59 },
+  { symbol: 'MSFT', name: 'Microsoft', price: 432.18, change: -2.45, pct: -0.56 },
+  { symbol: 'NVDA', name: 'NVIDIA Corp.', price: 875.40, change: 12.30, pct: 1.42 },
+  { symbol: 'GOOGL', name: 'Alphabet', price: 178.92, change: 0.83, pct: 0.47 },
+  { symbol: 'AMZN', name: 'Amazon', price: 198.63, change: -1.12, pct: -0.56 },
+  { symbol: 'TSLA', name: 'Tesla Inc.', price: 342.15, change: 8.72, pct: 2.61 },
+  { symbol: 'META', name: 'Meta Platforms', price: 612.40, change: -3.20, pct: -0.52 },
+];
+
+function initSimulatedStocks() {
+  simStocks.forEach(s => {
+    stocksData[s.symbol] = s;
+    stockHistories[s.symbol] = [];
+    for (let i = 0; i < 20; i++) stockHistories[s.symbol].push(s.price + (Math.random()-0.5) * s.price * 0.02);
+  });
+  document.getElementById('marketStatus').textContent = 'SIMULATED';
+  document.getElementById('marketStatus').className = 'panel-badge badge-sim';
+  renderStockList();
+}
+
+function tickSimulatedStocks() {
+  Object.values(stocksData).forEach(s => {
+    const delta = (Math.random() - 0.48) * s.price * 0.003;
+    s.price += delta;
+    s.change += delta;
+    s.pct = (s.change / (s.price - s.change)) * 100;
+    stockHistories[s.symbol].push(s.price);
+    if (stockHistories[s.symbol].length > 30) stockHistories[s.symbol].shift();
+  });
+  renderStockList();
+}
+
+// ==================== SIMULATED NEWS FALLBACK ====================
+function initSimulatedNews() {
+  newsData = [
+    { headline: 'NATO expands Mediterranean naval presence amid rising tensions in Eastern Mediterranean', source: 'REUTERS', time: '3m ago', region: 'europe', severity: 'high', origin: 'sim' },
+    { headline: 'Federal Reserve signals potential rate hold as inflation data stabilizes above 2% target', source: 'BLOOMBERG', time: '8m ago', region: 'namerica', severity: 'med', origin: 'sim' },
+    { headline: 'Semiconductor supply chain disruptions reported in Taiwan Strait shipping corridor', source: 'NIKKEI', time: '12m ago', region: 'asia', severity: 'high', origin: 'sim' },
+    { headline: 'OPEC+ members negotiate output adjustments ahead of quarterly production review', source: 'REUTERS', time: '18m ago', region: 'meast', severity: 'med', origin: 'sim' },
+    { headline: 'EU Parliament advances digital sovereignty legislation targeting major tech platforms', source: 'FT', time: '22m ago', region: 'europe', severity: 'low', origin: 'sim' },
+    { headline: 'Rare earth mineral deposits discovered in central African geological survey', source: 'BBC', time: '31m ago', region: 'africa', severity: 'med', origin: 'sim' },
+    { headline: 'US-China trade negotiations stall over technology transfer provisions', source: 'WSJ', time: '37m ago', region: 'namerica', severity: 'high', origin: 'sim' },
+    { headline: 'Japanese Yen strengthens against dollar following Bank of Japan policy signals', source: 'NIKKEI', time: '41m ago', region: 'asia', severity: 'low', origin: 'sim' },
+    { headline: 'Cyberattack targets European energy infrastructure — investigation underway', source: 'GUARDIAN', time: '45m ago', region: 'europe', severity: 'high', origin: 'sim' },
+    { headline: 'Arctic shipping route sees 40% increase in vessel traffic year-over-year', source: 'REUTERS', time: '58m ago', region: 'global', severity: 'med', origin: 'sim' },
+  ];
+  renderNewsList();
+}
+
+// ==================== SPARKLINES ====================
+function drawSparkline(canvas, data, isUp) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.clearRect(0, 0, w, h);
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  ctx.beginPath();
+  ctx.strokeStyle = isUp ? '#00ff88' : '#ff3366';
+  ctx.lineWidth = 2;
+  data.forEach((val, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((val - min) / range) * h * 0.8 - h * 0.1;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = isUp ? 'rgba(0,255,136,0.06)' : 'rgba(255,51,102,0.06)';
+  ctx.fill();
+}
+
+// ==================== AUTO-REFRESH FLIGHTS ON MAP MOVE ====================
+// Map pan/zoom: debounced fetch
+let moveTimeout;
+map.on('moveend', () => {
+  clearTimeout(moveTimeout);
+  moveTimeout = setTimeout(() => {
+    if (CONFIG.mode !== 'offline') fetchFlights();
+  }, 2000);
+});
+</script>
+</body>
+</html>
