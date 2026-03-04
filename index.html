@@ -204,7 +204,7 @@
 
   /* TRAFFIC LAYER TOGGLE */
   .traffic-toggle {
-    position: fixed; bottom: 14px; left: calc(50% + 110px); z-index: 600;
+    position: fixed; bottom: 46px; left: calc(50% + 110px); z-index: 600;
     display: flex; flex-direction: row; gap: 4px;
   }
   .traffic-btn {
@@ -227,7 +227,7 @@
     100% { opacity: 0; r: 28; }
   }
   .conflict-toggle {
-    position: fixed; bottom: 14px; left: calc(50% + 190px); z-index: 600;
+    position: fixed; bottom: 46px; left: calc(50% + 190px); z-index: 600;
     display: flex; flex-direction: row; gap: 4px;
   }
   .conflict-btn {
@@ -475,7 +475,7 @@
 
   /* Layer control */
   .layer-control {
-    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 600;
+    position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%); z-index: 600;
     display: flex; flex-direction: row; gap: 4px;
   }
   .layer-btn {
@@ -531,7 +531,7 @@
     </div>
     <div class="panel-toggles">
       <button class="toggle-btn active" data-panel="flights" onclick="togglePanel('flights',this)">✈ FLIGHTS</button>
-      <button class="toggle-btn active" data-panel="shipping" onclick="togglePanel('shipping',this)">🚢 SHIPPING</button>
+      <button class="toggle-btn disabled" data-panel="shipping" style="opacity:0.3; cursor:default; pointer-events:none;" title="Coming soon — awaiting free AIS API">🚢 SHIPPING</button>
       <button class="toggle-btn active" data-panel="news" onclick="togglePanel('news',this)">📡 NEWS</button>
       <button class="toggle-btn active" data-panel="stocks" onclick="togglePanel('stocks',this)">📈 STOCKS</button>
       <button class="toggle-btn active" data-panel="satellites" onclick="togglePanel('satellites',this)">🛰 SATS</button>
@@ -590,7 +590,7 @@
   </div>
 </div>
 
-<div class="panel panel-shipping" id="panelShipping">
+<div class="panel panel-shipping" id="panelShipping" style="display:none;">
   <div class="panel-header">
     <span class="panel-title">🚢 Maritime Traffic</span>
     <span class="panel-badge badge-sim" id="shipBadge">SIMULATED</span>
@@ -1439,8 +1439,9 @@ async function startLiveFeeds() {
     fetchLocalNews('gb');
   }
 
-  initShipping();
-  setInterval(animateShips, 3000);
+  // Shipping disabled — awaiting free AIS API
+  // initShipping();
+  // setInterval(animateShips, 3000);
 
   // Satellites
   fetchSatelliteTLEs();
@@ -1460,8 +1461,9 @@ function startSimulatedFeeds() {
   initSimulatedStocks();
   setInterval(tickSimulatedStocks, 3000);
   initSimulatedNews();
-  initShipping();
-  setInterval(animateShips, 3000);
+  // Shipping disabled — awaiting free AIS API
+  // initShipping();
+  // setInterval(animateShips, 3000);
 
   // Satellites work without config too
   fetchSatelliteTLEs();
@@ -1942,11 +1944,6 @@ function switchNewsTab(tab) {
 }
 
 async function fetchLocalNews(countryCode) {
-  if (!CONFIG.gnewsKey) {
-    document.getElementById('localNewsList').innerHTML = '<div class="error-msg">No GNews key — local news unavailable</div>';
-    return;
-  }
-
   const cc = countryCode.toLowerCase();
   const country = COUNTRY_MAP[cc] || { name: cc.toUpperCase(), flag: '🏳️' };
   localNewsCountry = { code: cc, ...country };
@@ -1958,28 +1955,93 @@ async function fetchLocalNews(countryCode) {
     document.getElementById('newsRegionLabel').textContent = country.name.toUpperCase();
   }
 
-  try {
-    const res = await fetch(`https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=${cc}&max=10&apikey=${CONFIG.gnewsKey}`);
-    const data = await res.json();
+  let articles = [];
 
-    if (data.articles && data.articles.length > 0) {
-      localNewsData = data.articles.map(a => ({
-        headline: a.title,
-        source: (a.source?.name || 'GNEWS').toUpperCase(),
-        time: timeAgo(new Date(a.publishedAt).getTime()),
-        url: a.url,
-        severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
-                  a.title.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
-      }));
-      renderLocalNewsList();
-      debugLog(`✓ ${localNewsData.length} local news items for ${country.name}`, 'ok');
-    } else {
-      localNewsData = [];
-      document.getElementById('localNewsList').innerHTML = `<div class="loading-msg">No news found for ${country.name}. Try a different country.</div>`;
+  // Source 1: GNews API (if key available)
+  if (CONFIG.gnewsKey) {
+    try {
+      const res = await fetch(`https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=${cc}&max=10&apikey=${CONFIG.gnewsKey}`);
+      const data = await res.json();
+      if (data.articles && data.articles.length > 0) {
+        articles = data.articles.map(a => ({
+          headline: a.title,
+          source: (a.source?.name || 'GNEWS').toUpperCase(),
+          time: timeAgo(new Date(a.publishedAt).getTime()),
+          url: a.url,
+          severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
+                    a.title.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
+          origin: 'gnews'
+        }));
+      }
+    } catch (err) {
+      debugLog(`GNews local fetch failed: ${err.message}`, 'warn');
     }
-  } catch (err) {
-    document.getElementById('localNewsList').innerHTML = `<div class="error-msg">Failed to fetch news: ${err.message}</div>`;
-    debugLog(`Local news fetch failed for ${cc}: ${err.message}`, 'err');
+  }
+
+  // Source 2: GDELT DOC 2.0 API (free, no key, always available)
+  // Use as primary if GNews returned nothing, or supplement if few results
+  if (articles.length < 5) {
+    try {
+      const countryQuery = encodeURIComponent(`sourcecountry:${cc}`);
+      const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?query=${countryQuery}&mode=artlist&maxrecords=20&format=json&timespan=48h`;
+      const res = await fetch(gdeltUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.articles && data.articles.length > 0) {
+          const gdeltArticles = data.articles
+            .filter(a => a.title && a.title.length > 10)
+            .slice(0, 15)
+            .map(a => ({
+              headline: a.title,
+              source: (a.domain || 'GDELT').toUpperCase().replace('WWW.','').split('.')[0].toUpperCase(),
+              time: a.seendate ? timeAgo(new Date(a.seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/,'$1-$2-$3T$4:$5:$6Z')).replace('undefined','')) : 'Recent',
+              url: a.url,
+              severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis|kill|dead|explos/) ? 'high' :
+                        a.title.toLowerCase().match(/risk|concern|warn|fall|drop|threat|strike/) ? 'med' : 'low',
+              origin: 'gdelt'
+            }));
+
+          // Deduplicate by similar headline (first 40 chars)
+          const existing = new Set(articles.map(a => a.headline.substring(0, 40).toLowerCase()));
+          const unique = gdeltArticles.filter(a => !existing.has(a.headline.substring(0, 40).toLowerCase()));
+          articles = [...articles, ...unique];
+        }
+      }
+    } catch (err) {
+      debugLog(`GDELT local fetch failed: ${err.message}`, 'warn');
+    }
+  }
+
+  // Source 3: GNews search fallback — search by country name instead of country code
+  if (articles.length === 0 && CONFIG.gnewsKey) {
+    try {
+      const searchQuery = encodeURIComponent(country.name);
+      const res = await fetch(`https://gnews.io/api/v4/search?q=${searchQuery}&lang=en&max=10&apikey=${CONFIG.gnewsKey}`);
+      const data = await res.json();
+      if (data.articles && data.articles.length > 0) {
+        articles = data.articles.map(a => ({
+          headline: a.title,
+          source: (a.source?.name || 'GNEWS').toUpperCase(),
+          time: timeAgo(new Date(a.publishedAt).getTime()),
+          url: a.url,
+          severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
+                    a.title.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
+          origin: 'gnews-search'
+        }));
+      }
+    } catch (err) {
+      debugLog(`GNews search fallback failed: ${err.message}`, 'warn');
+    }
+  }
+
+  if (articles.length > 0) {
+    localNewsData = articles.slice(0, 15);
+    renderLocalNewsList();
+    const sources = [...new Set(localNewsData.map(a => a.origin))].join(' + ');
+    debugLog(`✓ ${localNewsData.length} local news items for ${country.name} (${sources})`, 'ok');
+  } else {
+    localNewsData = [];
+    document.getElementById('localNewsList').innerHTML = `<div class="loading-msg">No news found for ${country.name}. Try a different country.</div>`;
   }
 }
 
