@@ -432,15 +432,15 @@
     </p>
 
     <label>Finnhub API Key (stocks + news)</label>
-    <input type="text" id="finnhubKey" placeholder="e.g. csXXXXXXXXXXXXXXXXXX">
+    <input type="text" id="finnhubKey" placeholder="e.g. csXXXXXXXXXXXXXXXXXX" value="d6j22ohr01ql467hvq6gd6j22ohr01ql467hvq70">
     <div class="modal-hint">Free at <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a> — 60 calls/min</div>
 
     <label>GNews API Key (regional news)</label>
-    <input type="text" id="gnewsKey" placeholder="e.g. a1b2c3d4e5f6g7h8i9j0">
+    <input type="text" id="gnewsKey" placeholder="e.g. a1b2c3d4e5f6g7h8i9j0" value="3197a7653ed97a31b61b7fc089c0aa87">
     <div class="modal-hint">Free at <a href="https://gnews.io" target="_blank">gnews.io</a> — 100 calls/day</div>
 
     <label>TomTom API Key (live traffic overlay)</label>
-    <input type="text" id="tomtomKey" placeholder="e.g. AbCdEfGhIjKlMnOpQrStUvWxYz">
+    <input type="text" id="tomtomKey" placeholder="e.g. AbCdEfGhIjKlMnOpQrStUvWxYz" value="T0z1oAPLcIotBjB8QpwxsLvlSA0SioYC">
     <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank">developer.tomtom.com</a> — 50k tiles/day</div>
 
     <div class="modal-actions">
@@ -560,7 +560,7 @@
 
 <script>
 // ==================== STATE ====================
-const CONFIG = { finnhubKey: null, gnewsKey: null, tomtomKey: null, mode: 'offline' };
+const CONFIG = { finnhubKey: 'd6j22ohr01ql467hvq6gd6j22ohr01ql467hvq70', gnewsKey: '3197a7653ed97a31b61b7fc089c0aa87', tomtomKey: 'T0z1oAPLcIotBjB8QpwxsLvlSA0SioYC', mode: 'offline' };
 let flightMarkers = [];
 let flightTrails = {};
 let shipMarkers = [];
