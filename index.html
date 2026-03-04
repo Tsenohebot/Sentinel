@@ -161,6 +161,31 @@
   }
   .region-btn:hover, .region-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
 
+  /* NEWS TABS */
+  .news-tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+  }
+  .news-tab {
+    flex: 1; padding: 8px 14px; font-family: 'Orbitron', sans-serif;
+    font-size: 9px; letter-spacing: 2px; text-align: center; cursor: pointer;
+    background: transparent; border: none; color: var(--text-dim);
+    border-bottom: 2px solid transparent; transition: all 0.2s;
+  }
+  .news-tab:hover { color: var(--text-secondary); }
+  .news-tab.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); background: rgba(0,200,255,0.03); }
+  .news-local-header {
+    padding: 8px 14px; border-bottom: 1px solid var(--border);
+    font-size: 10px; color: var(--text-secondary); display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .news-local-country {
+    font-family: 'Orbitron', sans-serif; font-size: 11px;
+    color: var(--accent-amber); letter-spacing: 1px; font-weight: 700;
+  }
+  .news-local-hint {
+    font-size: 9px; color: var(--text-dim); font-style: italic;
+  }
+
   /* STOCKS */
   .panel-stocks { bottom: 12px; right: 12px; width: 360px; max-height: calc(50vh - 20px); }
 
@@ -179,8 +204,8 @@
 
   /* TRAFFIC LAYER TOGGLE */
   .traffic-toggle {
-    position: fixed; bottom: 26px; right: 100px; z-index: 600;
-    display: flex; flex-direction: column; gap: 4px;
+    position: fixed; bottom: 14px; left: calc(50% + 110px); z-index: 600;
+    display: flex; flex-direction: row; gap: 4px;
   }
   .traffic-btn {
     font-family: 'JetBrains Mono', monospace; font-size: 9px;
@@ -190,6 +215,49 @@
   }
   .traffic-btn:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
   .traffic-btn.active { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,170,0,0.1); }
+
+  /* CONFLICT ZONES */
+  @keyframes conflict-pulse {
+    0%   { opacity: 0.35; transform: scale(1); }
+    50%  { opacity: 0.12; transform: scale(1.25); }
+    100% { opacity: 0.35; transform: scale(1); }
+  }
+  @keyframes conflict-ring {
+    0%   { opacity: 0.5; r: 8; }
+    100% { opacity: 0; r: 28; }
+  }
+  .conflict-toggle {
+    position: fixed; bottom: 14px; left: calc(50% + 190px); z-index: 600;
+    display: flex; flex-direction: row; gap: 4px;
+  }
+  .conflict-btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    padding: 5px 10px; border: 1px solid var(--border); background: rgba(15,21,32,0.8);
+    color: var(--text-secondary); cursor: pointer; border-radius: 4px; letter-spacing: 1px;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+  }
+  .conflict-btn:hover { border-color: #ff4444; color: #ff4444; }
+  .conflict-btn.active { border-color: #ff4444; color: #ff4444; background: rgba(255,68,68,0.1); }
+  .conflict-popup { font-family: 'JetBrains Mono', monospace; }
+  .conflict-popup .leaflet-popup-content-wrapper {
+    background: rgba(15,21,32,0.95); border: 1px solid rgba(255,68,68,0.3);
+    border-radius: 8px; color: var(--text-primary); box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .conflict-popup .leaflet-popup-tip { background: rgba(15,21,32,0.95); }
+  .conflict-popup-title {
+    font-family: 'Orbitron', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .conflict-popup-type { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 4px; }
+  .conflict-popup-detail { font-size: 10px; color: var(--text-secondary); line-height: 1.5; }
+  .conflict-popup-severity {
+    display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: 1px;
+    padding: 2px 6px; border-radius: 3px; margin-top: 6px;
+  }
+  .sev-critical { background: rgba(255,50,50,0.2); color: #ff5050; border: 1px solid rgba(255,50,50,0.3); }
+  .sev-high { background: rgba(255,140,0,0.2); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
+  .sev-moderate { background: rgba(255,220,50,0.15); color: #ffdc32; border: 1px solid rgba(255,220,50,0.2); }
+  .sev-low { background: rgba(100,200,255,0.15); color: #64c8ff; border: 1px solid rgba(100,200,255,0.2); }
 
   /* WEATHER LOCATION INFO */
   .weather-location {
@@ -407,8 +475,8 @@
 
   /* Layer control */
   .layer-control {
-    position: fixed; bottom: 26px; right: 14px; z-index: 600;
-    display: flex; flex-direction: column; gap: 4px;
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 600;
+    display: flex; flex-direction: row; gap: 4px;
   }
   .layer-btn {
     background: var(--bg-panel); border: 1px solid var(--border);
@@ -441,7 +509,11 @@
 
     <label>TomTom API Key (live traffic overlay)</label>
     <input type="text" id="tomtomKey" placeholder="e.g. AbCdEfGhIjKlMnOpQrStUvWxYz" value="T0z1oAPLcIotBjB8QpwxsLvlSA0SioYC">
-    <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank">developer.tomtom.com</a> — 50k tiles/day</div>
+    <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank">developer.tomtom.com</a> — 50K tiles/day</div>
+
+    <label>HERE API Key (traffic fallback)</label>
+    <input type="text" id="hereKey" placeholder="e.g. xYzAbCdEfGhIjKlMnOpQrStUvWx">
+    <div class="modal-hint">Free at <a href="https://developer.here.com" target="_blank">developer.here.com</a> — 250K/month (auto-fallback)</div>
 
     <div class="modal-actions">
       <button class="btn-primary" onclick="saveConfig()">LAUNCH SENTINEL</button>
@@ -464,6 +536,7 @@
       <button class="toggle-btn active" data-panel="stocks" onclick="togglePanel('stocks',this)">📈 STOCKS</button>
       <button class="toggle-btn active" data-panel="satellites" onclick="togglePanel('satellites',this)">🛰 SATS</button>
       <button class="toggle-btn" onclick="toggleTraffic(this)">🚗 TRAFFIC</button>
+      <button class="toggle-btn" onclick="toggleConflictZones(this)">⚠ CONFLICTS</button>
     </div>
   </div>
   <div class="header-status">
@@ -530,9 +603,24 @@
     <span class="panel-title">📡 Intelligence Feed</span>
     <span class="panel-badge badge-count" id="newsRegionLabel">GLOBAL</span>
   </div>
-  <div class="region-selector" id="regionSelector"></div>
-  <div class="panel-body" id="newsList" style="max-height: calc(50vh - 170px);">
-    <div class="loading-msg">Waiting for config...</div>
+  <div class="news-tabs">
+    <button class="news-tab active" id="newsTabGlobal" onclick="switchNewsTab('global')">🌐 GLOBAL</button>
+    <button class="news-tab" id="newsTabLocal" onclick="switchNewsTab('local')">📍 LOCAL</button>
+  </div>
+  <div id="newsGlobalPane">
+    <div class="region-selector" id="regionSelector"></div>
+    <div class="panel-body" id="newsList" style="max-height: calc(50vh - 210px);">
+      <div class="loading-msg">Waiting for config...</div>
+    </div>
+  </div>
+  <div id="newsLocalPane" style="display:none;">
+    <div class="news-local-header">
+      <span class="news-local-country" id="localNewsCountry">🇬🇧 UNITED KINGDOM</span>
+      <span class="news-local-hint">Click map to change</span>
+    </div>
+    <div class="panel-body" id="localNewsList" style="max-height: calc(50vh - 210px);">
+      <div class="loading-msg"><span class="spinner"></span>Fetching local news...</div>
+    </div>
   </div>
 </div>
 
@@ -657,6 +745,185 @@ function toggleTraffic(btn) {
   }
 }
 
+// ==================== CONFLICT ZONES OVERLAY ====================
+let conflictLayerGroup = null;
+let conflictsActive = false;
+
+// Static fallback conflict zone data — used if live fetch fails
+const STATIC_CONFLICT_ZONES = [
+  // CRITICAL (10,000+ deaths/year)
+  { name: 'Ukraine — Russo-Ukrainian War', lat: 48.5, lng: 37.5, radius: 280000, severity: 'critical',
+    type: 'Interstate War', since: '2022', detail: 'Full-scale Russian invasion. Eastern front along Donetsk/Luhansk, strikes on infrastructure nationwide. 200K+ estimated casualties.' },
+  { name: 'Gaza — Israel–Palestine War', lat: 31.4, lng: 34.4, radius: 60000, severity: 'critical',
+    type: 'Interstate Conflict', since: '2023', detail: 'Israeli military operations in Gaza Strip following Oct 7 attack. 21K+ casualties in 2024-25. Severe humanitarian crisis.' },
+  { name: 'Sudan — Civil War', lat: 15.5, lng: 32.5, radius: 350000, severity: 'critical',
+    type: 'Civil War', since: '2023', detail: 'SAF vs RSF. 20K+ killed in 2024-25. Darfur and Khartoum worst affected. Mass displacement.' },
+  { name: 'Myanmar — Civil War', lat: 19.8, lng: 96.5, radius: 300000, severity: 'critical',
+    type: 'Civil War', since: '2021', detail: 'Post-coup conflict. 1200+ armed groups. 15K+ killed 2024-25. Resistance forces vs military junta.' },
+
+  // HIGH (1,000-9,999 deaths/year)
+  { name: 'Syria — Civil War', lat: 35.0, lng: 38.5, radius: 200000, severity: 'high',
+    type: 'Civil War', since: '2011', detail: 'Post-Assad resurgent fighting. Multiple factions including HTS, SDF, remnant forces. Ongoing instability.' },
+  { name: 'Mexico — Drug War', lat: 23.5, lng: -102.5, radius: 400000, severity: 'high',
+    type: 'Drug War', since: '2006', detail: 'Cartel violence. 8,600+ conflict fatalities in 2024-25. Sinaloa, Jalisco, Chiapas most affected.' },
+  { name: 'Yemen — Houthi Conflict', lat: 15.5, lng: 44.2, radius: 180000, severity: 'high',
+    type: 'Civil War / Proxy', since: '2014', detail: 'Houthi vs government forces. Red Sea shipping attacks. US/UK strikes on Houthi positions.' },
+  { name: 'Nigeria — Multi-Front Conflict', lat: 9.5, lng: 7.5, radius: 280000, severity: 'high',
+    type: 'Insurgency / Communal', since: '2009', detail: 'Boko Haram/ISWAP in NE, banditry in NW, separatist tensions in SE. Complex security crisis.' },
+  { name: 'Haiti — Gang Violence', lat: 18.9, lng: -72.3, radius: 50000, severity: 'high',
+    type: 'Gang War / State Collapse', since: '2021', detail: '4,500+ killed by political violence. Gangs control large areas of Port-au-Prince. State near collapse.' },
+  { name: 'DR Congo — Eastern Conflict', lat: -1.5, lng: 28.8, radius: 200000, severity: 'high',
+    type: 'Civil War / Proxy', since: '1998', detail: 'M23, ADF, and 100+ armed groups in Kivu provinces. Rwanda-backed M23 advances. Humanitarian catastrophe.' },
+  { name: 'Pakistan — Insurgencies', lat: 31.0, lng: 69.5, radius: 200000, severity: 'high',
+    type: 'Insurgency', since: '2004', detail: 'TTP and Baloch separatists. Worsening in peripheries. Cross-border tensions with Afghanistan and India.' },
+
+  // MODERATE (100-999 deaths/year)
+  { name: 'Sahel — Mali/Burkina Faso', lat: 14.5, lng: -2.0, radius: 350000, severity: 'moderate',
+    type: 'Jihadist Insurgency', since: '2012', detail: 'JNIM and ISGS activity expanding. Mali south/west new battlegrounds. Siege tactics, kidnapping economy.' },
+  { name: 'Colombia — Armed Groups', lat: 4.0, lng: -73.0, radius: 250000, severity: 'moderate',
+    type: 'Armed Group Conflict', since: '1964', detail: 'ELN, FARC dissidents, cartels. Total Peace plan under strain. Hotspot clashes escalating.' },
+  { name: 'Somalia — Al-Shabaab', lat: 4.0, lng: 45.0, radius: 250000, severity: 'moderate',
+    type: 'Insurgency', since: '2007', detail: 'Al-Shabaab controls rural areas. Government offensive with AU support. Persistent threat.' },
+  { name: 'Afghanistan — Taliban vs ISKP', lat: 34.0, lng: 67.0, radius: 250000, severity: 'moderate',
+    type: 'Insurgency', since: '2021', detail: 'Taliban rule contested by ISKP attacks. TTP safe havens fueling Pakistan tensions.' },
+  { name: 'Ethiopia — Regional Conflicts', lat: 8.5, lng: 39.5, radius: 250000, severity: 'moderate',
+    type: 'Ethnic / Regional', since: '2020', detail: 'Post-Tigray ceasefire tensions. Amhara, Oromia insurgencies continue. Fano militia active.' },
+  { name: 'West Bank — Israeli Raids', lat: 32.0, lng: 35.3, radius: 50000, severity: 'moderate',
+    type: 'Military Operations', since: '2023', detail: 'Intensified IDF raids in Jenin, Tulkarm, Nablus. Settlement violence. Escalated since Oct 2023.' },
+  { name: 'Lebanon — Border Conflict', lat: 33.8, lng: 35.8, radius: 60000, severity: 'moderate',
+    type: 'Cross-border', since: '2023', detail: 'Hezbollah-Israel exchanges. Southern Lebanon strikes. Post-ceasefire tensions remain.' },
+  { name: 'Ecuador — Security Crisis', lat: -1.5, lng: -78.5, radius: 120000, severity: 'moderate',
+    type: 'Organized Crime', since: '2023', detail: 'Gang violence and narco-trafficking surge. State of emergency declared. Prison system crisis.' },
+  { name: 'Cameroon — Anglophone Crisis', lat: 5.5, lng: 9.8, radius: 100000, severity: 'moderate',
+    type: 'Separatist Conflict', since: '2017', detail: 'Ambazonia separatists vs government in NW/SW regions. Boko Haram in Far North.' },
+  { name: 'Mozambique — Cabo Delgado', lat: -12.5, lng: 40.0, radius: 120000, severity: 'moderate',
+    type: 'Insurgency', since: '2017', detail: 'ASWJ/ISIS-linked insurgency in northern Cabo Delgado. Displacement of 1M+ people.' },
+  { name: 'Brazil — Urban Violence', lat: -14.0, lng: -47.0, radius: 350000, severity: 'moderate',
+    type: 'Gang / Militia', since: 'Ongoing', detail: 'PCC, Comando Vermelho and militia violence. Among top 10 most conflict-affected globally per ACLED.' },
+
+  // LOW / WATCHLIST
+  { name: 'South Sudan — Factional', lat: 7.0, lng: 31.0, radius: 180000, severity: 'low',
+    type: 'Political Violence', since: '2013', detail: 'Election delays, factional violence. Subnational armed clashes. Humanitarian emergency.' },
+  { name: 'Iraq — Residual Conflict', lat: 33.5, lng: 43.5, radius: 200000, severity: 'low',
+    type: 'Insurgency', since: '2003', detail: 'ISIS remnants, militia tensions. Lower intensity but persistent security incidents.' },
+  { name: 'India-Pakistan — Kashmir', lat: 34.0, lng: 75.0, radius: 80000, severity: 'low',
+    type: 'Territorial Dispute', since: '1947', detail: 'Line of Control tensions. Periodic escalations. Nuclear-armed rivals.' },
+];
+
+// Live conflict zones — fetched from conflict_zones.json (generated by update_conflicts.py via GitHub Actions)
+let CONFLICT_ZONES = [...STATIC_CONFLICT_ZONES];
+let conflictDataSource = 'static';
+
+async function fetchLiveConflictZones() {
+  try {
+    const res = await fetch('conflict_zones.json?t=' + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.zones && data.zones.length > 0) {
+      CONFLICT_ZONES = data.zones;
+      conflictDataSource = 'live';
+      const age = data.generated ? ` (updated ${timeAgo(new Date(data.generated).getTime())})` : '';
+      debugLog(`⚠ Live conflict data loaded: ${data.zones.length} zones from GDELT${age}`, 'ok');
+      // Re-render if already active
+      if (conflictsActive) renderConflictZones();
+      return true;
+    }
+  } catch (e) {
+    debugLog(`⚠ Live conflict fetch failed (${e.message}), using static data`, 'warn');
+  }
+  return false;
+}
+
+// Try to load live data on startup
+fetchLiveConflictZones();
+
+const SEVERITY_COLORS = {
+  critical: { fill: '#ff2020', stroke: '#ff5050', pulse: 'rgba(255,32,32,', glow: '0 0 20px rgba(255,32,32,0.4)' },
+  high:     { fill: '#ff8c00', stroke: '#ffaa00', pulse: 'rgba(255,140,0,', glow: '0 0 15px rgba(255,140,0,0.3)' },
+  moderate: { fill: '#ffdc32', stroke: '#ffe566', pulse: 'rgba(255,220,50,', glow: '0 0 10px rgba(255,220,50,0.2)' },
+  low:      { fill: '#64c8ff', stroke: '#8ed8ff', pulse: 'rgba(100,200,255,', glow: '0 0 8px rgba(100,200,255,0.2)' },
+};
+
+function toggleConflictZones(btn) {
+  conflictsActive = !conflictsActive;
+  btn.classList.toggle('active', conflictsActive);
+
+  if (conflictsActive) {
+    renderConflictZones();
+    const src = conflictDataSource === 'live' ? 'GDELT live' : 'static';
+    debugLog(`⚠ Conflict zones overlay enabled — ${CONFLICT_ZONES.length} zones (${src})`, 'ok');
+  } else {
+    if (conflictLayerGroup) { map.removeLayer(conflictLayerGroup); conflictLayerGroup = null; }
+    debugLog('Conflict zones overlay disabled', 'ok');
+  }
+}
+
+function renderConflictZones() {
+  if (conflictLayerGroup) { map.removeLayer(conflictLayerGroup); }
+  conflictLayerGroup = L.layerGroup();
+
+  CONFLICT_ZONES.forEach(zone => {
+    const colors = SEVERITY_COLORS[zone.severity];
+
+    // Pulsing circle area
+    const circle = L.circle([zone.lat, zone.lng], {
+      radius: zone.radius,
+      fillColor: colors.fill,
+      fillOpacity: 0.08,
+      color: colors.stroke,
+      weight: 1,
+      opacity: 0.3,
+      className: 'conflict-zone-circle'
+    });
+
+    // Animated center marker using divIcon
+    const pulseSize = zone.severity === 'critical' ? 28 : zone.severity === 'high' ? 22 : 16;
+    const animSpeed = zone.severity === 'critical' ? '2s' : zone.severity === 'high' ? '3s' : '4s';
+
+    const marker = L.marker([zone.lat, zone.lng], {
+      icon: L.divIcon({
+        className: 'conflict-marker-icon',
+        iconSize: [pulseSize * 2, pulseSize * 2],
+        iconAnchor: [pulseSize, pulseSize],
+        html: `
+          <svg width="${pulseSize*2}" height="${pulseSize*2}" viewBox="0 0 ${pulseSize*2} ${pulseSize*2}" style="overflow:visible;">
+            <circle cx="${pulseSize}" cy="${pulseSize}" r="${pulseSize * 0.7}"
+              fill="${colors.fill}" opacity="0.35"
+              style="animation: conflict-pulse ${animSpeed} ease-in-out infinite; transform-origin: center;" />
+            <circle cx="${pulseSize}" cy="${pulseSize}" r="${pulseSize * 0.3}"
+              fill="${colors.fill}" opacity="0.8" />
+            <circle cx="${pulseSize}" cy="${pulseSize}" r="${pulseSize * 0.7}" fill="none"
+              stroke="${colors.stroke}" stroke-width="1.5" opacity="0.4">
+              <animate attributeName="r" from="${pulseSize*0.4}" to="${pulseSize*1.2}" dur="${animSpeed}" repeatCount="indefinite" />
+              <animate attributeName="opacity" from="0.5" to="0" dur="${animSpeed}" repeatCount="indefinite" />
+            </circle>
+          </svg>`
+      }),
+      interactive: true
+    });
+
+    // Popup
+    const sevLabel = zone.severity.toUpperCase();
+    const popupContent = `
+      <div style="min-width:220px; max-width:280px;">
+        <div class="conflict-popup-title" style="color:${colors.stroke};">⚠ ${zone.name}</div>
+        <div class="conflict-popup-type">${zone.type} · SINCE ${zone.since}</div>
+        <div class="conflict-popup-detail">${zone.detail}</div>
+        <span class="conflict-popup-severity sev-${zone.severity}">${sevLabel}</span>
+      </div>`;
+
+    marker.bindPopup(popupContent, {
+      className: 'conflict-popup',
+      maxWidth: 300,
+      closeButton: true,
+    });
+
+    circle.addTo(conflictLayerGroup);
+    marker.addTo(conflictLayerGroup);
+  });
+
+  conflictLayerGroup.addTo(map);
+}
 // ==================== SATELLITE TRACKER (ISS + Notable Sats via SGP4) ====================
 let satMarkers = [];
 let satData = [];
@@ -1035,6 +1302,13 @@ map.on('click', async (e) => {
   } catch (err) {
     content.innerHTML = `<div class="error-msg">Weather fetch failed: ${err.message}</div>`;
   }
+
+  // Also reverse geocode for local news (async, non-blocking)
+  reverseGeocodeForNews(lat, lng).then(cc => {
+    if (cc && cc !== localNewsCountry.code) {
+      fetchLocalNews(cc);
+    }
+  });
 });
 
 // Fetch nearest city/town info from Wikipedia
@@ -1161,6 +1435,8 @@ async function startLiveFeeds() {
   if (CONFIG.gnewsKey) {
     fetchGNews();
     setInterval(fetchGNews, 300000);
+    // Default local news to UK
+    fetchLocalNews('gb');
   }
 
   initShipping();
@@ -1617,6 +1893,135 @@ function renderNewsList() {
   document.getElementById('newsList').innerHTML = html;
 }
 
+// ==================== NEWS TABS (GLOBAL / LOCAL) ====================
+let activeNewsTab = 'global';
+let localNewsData = [];
+let localNewsCountry = { code: 'gb', name: 'United Kingdom', flag: '🇬🇧' };
+
+// ISO 3166-1 alpha-2 to country name + flag (common ones)
+const COUNTRY_MAP = {
+  us: { name: 'United States', flag: '🇺🇸' }, gb: { name: 'United Kingdom', flag: '🇬🇧' },
+  ca: { name: 'Canada', flag: '🇨🇦' }, au: { name: 'Australia', flag: '🇦🇺' },
+  de: { name: 'Germany', flag: '🇩🇪' }, fr: { name: 'France', flag: '🇫🇷' },
+  it: { name: 'Italy', flag: '🇮🇹' }, es: { name: 'Spain', flag: '🇪🇸' },
+  jp: { name: 'Japan', flag: '🇯🇵' }, kr: { name: 'South Korea', flag: '🇰🇷' },
+  cn: { name: 'China', flag: '🇨🇳' }, in: { name: 'India', flag: '🇮🇳' },
+  br: { name: 'Brazil', flag: '🇧🇷' }, mx: { name: 'Mexico', flag: '🇲🇽' },
+  ru: { name: 'Russia', flag: '🇷🇺' }, za: { name: 'South Africa', flag: '🇿🇦' },
+  ae: { name: 'UAE', flag: '🇦🇪' }, sa: { name: 'Saudi Arabia', flag: '🇸🇦' },
+  eg: { name: 'Egypt', flag: '🇪🇬' }, ng: { name: 'Nigeria', flag: '🇳🇬' },
+  il: { name: 'Israel', flag: '🇮🇱' }, tr: { name: 'Turkey', flag: '🇹🇷' },
+  pk: { name: 'Pakistan', flag: '🇵🇰' }, id: { name: 'Indonesia', flag: '🇮🇩' },
+  ph: { name: 'Philippines', flag: '🇵🇭' }, th: { name: 'Thailand', flag: '🇹🇭' },
+  vn: { name: 'Vietnam', flag: '🇻🇳' }, my: { name: 'Malaysia', flag: '🇲🇾' },
+  sg: { name: 'Singapore', flag: '🇸🇬' }, nz: { name: 'New Zealand', flag: '🇳🇿' },
+  ie: { name: 'Ireland', flag: '🇮🇪' }, nl: { name: 'Netherlands', flag: '🇳🇱' },
+  be: { name: 'Belgium', flag: '🇧🇪' }, ch: { name: 'Switzerland', flag: '🇨🇭' },
+  at: { name: 'Austria', flag: '🇦🇹' }, pt: { name: 'Portugal', flag: '🇵🇹' },
+  pl: { name: 'Poland', flag: '🇵🇱' }, se: { name: 'Sweden', flag: '🇸🇪' },
+  no: { name: 'Norway', flag: '🇳🇴' }, dk: { name: 'Denmark', flag: '🇩🇰' },
+  fi: { name: 'Finland', flag: '🇫🇮' }, gr: { name: 'Greece', flag: '🇬🇷' },
+  ar: { name: 'Argentina', flag: '🇦🇷' }, co: { name: 'Colombia', flag: '🇨🇴' },
+  cl: { name: 'Chile', flag: '🇨🇱' }, ke: { name: 'Kenya', flag: '🇰🇪' },
+  ua: { name: 'Ukraine', flag: '🇺🇦' }, ro: { name: 'Romania', flag: '🇷🇴' },
+  cz: { name: 'Czech Republic', flag: '🇨🇿' }, hu: { name: 'Hungary', flag: '🇭🇺' },
+  tw: { name: 'Taiwan', flag: '🇹🇼' }, hk: { name: 'Hong Kong', flag: '🇭🇰' },
+};
+
+function switchNewsTab(tab) {
+  activeNewsTab = tab;
+  document.getElementById('newsTabGlobal').classList.toggle('active', tab === 'global');
+  document.getElementById('newsTabLocal').classList.toggle('active', tab === 'local');
+  document.getElementById('newsGlobalPane').style.display = tab === 'global' ? '' : 'none';
+  document.getElementById('newsLocalPane').style.display = tab === 'local' ? '' : 'none';
+  document.getElementById('newsRegionLabel').textContent = tab === 'global' ? 'GLOBAL' : localNewsCountry.name.toUpperCase();
+
+  if (tab === 'local' && localNewsData.length === 0) {
+    fetchLocalNews(localNewsCountry.code);
+  }
+}
+
+async function fetchLocalNews(countryCode) {
+  if (!CONFIG.gnewsKey) {
+    document.getElementById('localNewsList').innerHTML = '<div class="error-msg">No GNews key — local news unavailable</div>';
+    return;
+  }
+
+  const cc = countryCode.toLowerCase();
+  const country = COUNTRY_MAP[cc] || { name: cc.toUpperCase(), flag: '🏳️' };
+  localNewsCountry = { code: cc, ...country };
+
+  document.getElementById('localNewsCountry').textContent = `${country.flag} ${country.name.toUpperCase()}`;
+  document.getElementById('localNewsList').innerHTML = '<div class="loading-msg"><span class="spinner"></span>Fetching news for ' + country.name + '...</div>';
+
+  if (activeNewsTab === 'local') {
+    document.getElementById('newsRegionLabel').textContent = country.name.toUpperCase();
+  }
+
+  try {
+    const res = await fetch(`https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=${cc}&max=10&apikey=${CONFIG.gnewsKey}`);
+    const data = await res.json();
+
+    if (data.articles && data.articles.length > 0) {
+      localNewsData = data.articles.map(a => ({
+        headline: a.title,
+        source: (a.source?.name || 'GNEWS').toUpperCase(),
+        time: timeAgo(new Date(a.publishedAt).getTime()),
+        url: a.url,
+        severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis/) ? 'high' :
+                  a.title.toLowerCase().match(/risk|concern|warn|fall|drop/) ? 'med' : 'low',
+      }));
+      renderLocalNewsList();
+      debugLog(`✓ ${localNewsData.length} local news items for ${country.name}`, 'ok');
+    } else {
+      localNewsData = [];
+      document.getElementById('localNewsList').innerHTML = `<div class="loading-msg">No news found for ${country.name}. Try a different country.</div>`;
+    }
+  } catch (err) {
+    document.getElementById('localNewsList').innerHTML = `<div class="error-msg">Failed to fetch news: ${err.message}</div>`;
+    debugLog(`Local news fetch failed for ${cc}: ${err.message}`, 'err');
+  }
+}
+
+function renderLocalNewsList() {
+  if (localNewsData.length === 0) {
+    document.getElementById('localNewsList').innerHTML = '<div class="loading-msg">No local news loaded. Click the map to select a country.</div>';
+    return;
+  }
+  const html = localNewsData.map(n => `
+    <div class="news-item" onclick="${n.url ? `window.open('${n.url}','_blank')` : ''}">
+      <div class="news-meta">
+        <span class="news-source">${n.source}</span>
+        <span class="news-time">${n.time}</span>
+        <span class="news-region-tag">${localNewsCountry.flag} ${localNewsCountry.name.toUpperCase()}</span>
+      </div>
+      <div class="news-headline">
+        <span class="news-severity severity-${n.severity}"></span>
+        ${n.headline}
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('localNewsList').innerHTML = html;
+}
+
+// Reverse geocode map clicks to get country code for local news
+async function reverseGeocodeForNews(lat, lng) {
+  try {
+    // Use OpenStreetMap Nominatim for reverse geocoding (free, no key)
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat.toFixed(4)}&lon=${lng.toFixed(4)}&zoom=3&accept-language=en`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'SENTINEL-Dashboard/1.0' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const cc = data.address?.country_code;
+    if (cc) {
+      return cc.toLowerCase();
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function timeAgo(ts) {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
@@ -1779,7 +2184,7 @@ function drawSparkline(canvas, data, isUp) {
   ctx.fill();
 }
 
-// ==================== AUTO-REFRESH FLIGHTS ON MAP MOVE ====================
+// ==================== AUTO-REFRESH FLIGHTS ON MAP MOVE/ZOOM ====================
 // Map pan/zoom: debounced fetch
 let moveTimeout;
 map.on('moveend', () => {
@@ -1787,6 +2192,14 @@ map.on('moveend', () => {
   moveTimeout = setTimeout(() => {
     if (CONFIG.mode !== 'offline') fetchFlights();
   }, 2000);
+});
+
+let zoomTimeout;
+map.on('zoomend', () => {
+  clearTimeout(zoomTimeout);
+  zoomTimeout = setTimeout(() => {
+    if (CONFIG.mode !== 'offline') fetchFlights();
+  }, 1500);
 });
 </script>
 </body>

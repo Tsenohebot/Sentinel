@@ -1,0 +1,52 @@
+name: Update Conflict Zones
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-conflicts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy scikit-learn requests
+
+      - name: Run conflict zone updater
+        run: |
+          python3 update_conflicts.py \
+            --days 2 \
+            --max-files 50 \
+            --output conflict_zones.json
+
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet conflict_zones.json 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "SENTINEL Bot"
+          git config user.email "sentinel-bot@users.noreply.github.com"
+          git add conflict_zones.json
+          git commit -m "🔄 Update conflict zones — $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
