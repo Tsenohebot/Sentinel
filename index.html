@@ -486,6 +486,169 @@
   }
   .layer-btn:hover { border-color: var(--border-bright); color: var(--text-primary); }
   .layer-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+
+  /* ==================== MOBILE RESPONSIVE ==================== */
+  @media (max-width: 768px) {
+    /* HEADER: two-row layout */
+    .header {
+      height: auto; flex-wrap: wrap; padding: 6px 10px; gap: 4px;
+    }
+    .header-left {
+      width: 100%; justify-content: space-between;
+    }
+    .logo { font-size: 13px; letter-spacing: 3px; }
+    .logo-sub { font-size: 7px; letter-spacing: 2px; }
+
+    .panel-toggles {
+      width: 100%; overflow-x: auto; white-space: nowrap; gap: 3px;
+      padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .panel-toggles::-webkit-scrollbar { display: none; }
+    .toggle-btn { font-size: 8px; padding: 3px 7px; flex-shrink: 0; }
+
+    .header-status {
+      position: absolute; top: 6px; right: 10px;
+      gap: 8px; font-size: 10px;
+    }
+    .header-time { font-size: 10px; display: none; }
+    .config-btn { font-size: 8px; padding: 3px 6px; }
+
+    /* MAP: adjust for taller header */
+    #map { top: 72px; }
+
+    /* ALL PANELS: full-width slide-up drawers */
+    .panel {
+      left: 0 !important; right: 0 !important; bottom: 0 !important;
+      top: auto !important; width: 100% !important;
+      max-height: 45vh !important; border-radius: 12px 12px 0 0;
+      transform: none; transition: opacity 0.25s, max-height 0.25s;
+    }
+    .panel.hidden { opacity: 0; pointer-events: none; max-height: 0 !important; }
+
+    .panel-flights,
+    .panel-stocks,
+    .panel-satellites,
+    .panel-shipping { top: auto !important; }
+
+    .panel-news { width: 100% !important; max-height: 50vh !important; }
+
+    .panel-body { max-height: 35vh !important; }
+
+    /* PANEL HEADER: add drag handle hint */
+    .panel-header {
+      padding: 8px 14px; position: relative;
+    }
+    .panel-header::before {
+      content: ''; position: absolute; top: 4px; left: 50%;
+      transform: translateX(-50%); width: 32px; height: 3px;
+      background: var(--border-bright); border-radius: 2px;
+    }
+
+    /* FLIGHT LIST: compact items */
+    .flight-item { padding: 6px 0; gap: 8px; }
+    .flight-callsign { font-size: 11px; }
+    .flight-route { font-size: 9px; }
+    .flight-alt { font-size: 9px; }
+
+    /* NEWS: compact */
+    .news-headline { font-size: 11px; line-height: 1.4; }
+    .news-source { font-size: 8px; }
+    .news-time { font-size: 8px; }
+    .region-selector { padding: 6px 10px; gap: 3px; }
+    .region-btn { font-size: 8px; padding: 2px 6px; }
+    .news-tabs { }
+    .news-tab { padding: 6px 10px; font-size: 8px; }
+    .news-local-header { padding: 6px 10px; }
+    .news-local-country { font-size: 10px; }
+
+    /* STOCKS: compact */
+    .stock-symbol { font-size: 11px; min-width: 40px; }
+    .stock-name { font-size: 9px; }
+    .stock-price { font-size: 12px; }
+    .stock-change { font-size: 9px; }
+    .stock-sparkline { height: 22px; }
+
+    /* SATELLITES: compact */
+    .sat-name { font-size: 11px; }
+    .sat-detail { font-size: 9px; }
+    .sat-alt { font-size: 9px; }
+
+    /* LAYER CONTROLS: bottom bar above coords */
+    .layer-control {
+      bottom: 38px; gap: 3px;
+    }
+    .layer-btn { font-size: 8px; padding: 5px 8px; }
+
+    .traffic-toggle {
+      bottom: 38px; left: calc(50% + 80px);
+    }
+    .traffic-btn { font-size: 8px; padding: 4px 8px; }
+
+    .conflict-toggle {
+      bottom: 38px; left: calc(50% + 140px);
+    }
+    .conflict-btn { font-size: 8px; padding: 4px 8px; }
+
+    /* COORDS BAR */
+    .map-coords {
+      font-size: 8px; padding: 3px 10px; letter-spacing: 1px;
+    }
+
+    /* WEATHER PANEL: full width bottom sheet */
+    .weather-panel {
+      left: 0 !important; right: 0 !important; bottom: 0 !important;
+      top: auto !important; width: 100% !important;
+      max-height: 60vh; border-radius: 12px 12px 0 0;
+      padding: 12px 14px;
+    }
+    .weather-icon { font-size: 28px; }
+    .weather-temp { font-size: 22px; }
+    .weather-grid { font-size: 10px; gap: 4px 10px; }
+    .weather-forecast-hour { font-size: 9px; }
+    .weather-location-name { font-size: 12px; }
+    .weather-wiki-summary { font-size: 10px; max-height: 60px; }
+
+    /* CONFIG MODAL: full width */
+    .modal { width: 95vw; padding: 20px; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { font-size: 14px; letter-spacing: 3px; }
+    .modal p { font-size: 10px; }
+    .modal input { font-size: 11px; padding: 8px 10px; }
+    .btn-primary, .btn-secondary { font-size: 10px; padding: 8px; }
+
+    /* DEBUG LOG: full width */
+    .debug-log {
+      width: 95vw; left: 2.5vw; transform: none;
+      top: 76px; max-height: 140px;
+    }
+
+    /* CONFLICT POPUPS: constrain width */
+    .conflict-popup .leaflet-popup-content-wrapper { max-width: 85vw; }
+    .conflict-popup-title { font-size: 10px; }
+    .conflict-popup-detail { font-size: 9px; }
+
+    /* SCANLINE: adjust */
+    .scanline { top: 72px; }
+
+    /* FLIGHT COUNT OVERLAY */
+    .flight-count-overlay { top: 76px; font-size: 9px; }
+
+    /* Hide satellites panel by default on mobile (too much clutter) */
+    .panel-satellites { display: none; }
+    .panel-satellites.mobile-show { display: block; }
+  }
+
+  /* VERY SMALL SCREENS (iPhone SE etc) */
+  @media (max-width: 380px) {
+    .logo { font-size: 11px; }
+    .logo-sub { display: none; }
+    .toggle-btn { font-size: 7px; padding: 2px 5px; }
+    .panel { max-height: 40vh !important; }
+    .panel-body { max-height: 30vh !important; }
+    .layer-control { bottom: 32px; }
+    .traffic-toggle { bottom: 32px; }
+    .conflict-toggle { bottom: 32px; }
+  }
 </style>
 </head>
 <body>
@@ -1211,17 +1374,23 @@ map.on('click', async (e) => {
   const panel = document.getElementById('weatherPanel');
   const content = document.getElementById('weatherContent');
 
-  // Position panel near click (convert to pixel)
-  const px = map.latLngToContainerPoint(e.latlng);
-  const mapRect = document.getElementById('map').getBoundingClientRect();
-  let left = mapRect.left + px.x + 20;
-  let top = mapRect.top + px.y - 100;
-  // Keep panel on screen
-  if (left + 360 > window.innerWidth) left = window.innerWidth - 370;
-  if (top < 60) top = 60;
-  if (top + 500 > window.innerHeight) top = window.innerHeight - 510;
-  panel.style.left = left + 'px';
-  panel.style.top = top + 'px';
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    // Mobile: CSS handles positioning (bottom sheet)
+    panel.style.left = '';
+    panel.style.top = '';
+  } else {
+    // Desktop: position near click
+    const px = map.latLngToContainerPoint(e.latlng);
+    const mapRect = document.getElementById('map').getBoundingClientRect();
+    let left = mapRect.left + px.x + 20;
+    let top = mapRect.top + px.y - 100;
+    if (left + 360 > window.innerWidth) left = window.innerWidth - 370;
+    if (top < 60) top = 60;
+    if (top + 500 > window.innerHeight) top = window.innerHeight - 510;
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
 
   panel.classList.remove('hidden');
   content.innerHTML = '<div class="loading-msg"><span class="spinner"></span>Fetching weather & location data...</div>';
@@ -1380,8 +1549,30 @@ const panelIds = { flights: 'panelFlights', shipping: 'panelShipping', news: 'pa
 
 function togglePanel(name, btn) {
   const panel = document.getElementById(panelIds[name]);
-  panel.classList.toggle('hidden');
-  btn.classList.toggle('active');
+  const isMobile = window.innerWidth <= 768;
+
+  if (isMobile) {
+    // On mobile: only one panel at a time
+    const isCurrentlyVisible = !panel.classList.contains('hidden');
+
+    // Hide all panels first
+    Object.entries(panelIds).forEach(([key, id]) => {
+      const p = document.getElementById(id);
+      p.classList.add('hidden');
+      p.classList.remove('mobile-show');
+      const b = document.querySelector(`[data-panel="${key}"]`);
+      if (b) b.classList.remove('active');
+    });
+
+    if (!isCurrentlyVisible) {
+      panel.classList.remove('hidden');
+      if (name === 'satellites') panel.classList.add('mobile-show');
+      btn.classList.add('active');
+    }
+  } else {
+    panel.classList.toggle('hidden');
+    btn.classList.toggle('active');
+  }
 }
 
 // ==================== CONFIG ====================
@@ -1994,7 +2185,7 @@ async function fetchLocalNews(countryCode) {
             .map(a => ({
               headline: a.title,
               source: (a.domain || 'GDELT').toUpperCase().replace('WWW.','').split('.')[0].toUpperCase(),
-              time: a.seendate ? timeAgo(new Date(a.seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/,'$1-$2-$3T$4:$5:$6Z')).replace('undefined','')) : 'Recent',
+              time: (() => { try { if (!a.seendate) return 'Recent'; const s = String(a.seendate); const d = new Date(s.length === 15 ? s.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/,'$1-$2-$3T$4:$5:$6Z') : s); return isNaN(d.getTime()) ? 'Recent' : timeAgo(d.getTime()); } catch(e) { return 'Recent'; } })(),
               url: a.url,
               severity: a.title.toLowerCase().match(/crash|war|attack|emergency|crisis|kill|dead|explos/) ? 'high' :
                         a.title.toLowerCase().match(/risk|concern|warn|fall|drop|threat|strike/) ? 'med' : 'low',
