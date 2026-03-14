@@ -1,0 +1,105 @@
+name: Build SENTINEL Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: sentinel-desktop
+        run: npm install
+
+      - name: Update version
+        working-directory: sentinel-desktop
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Build app
+        working-directory: sentinel-desktop
+        run: npm run build:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-${{ matrix.platform }}
+          path: |
+            sentinel-desktop/dist/*.dmg
+            sentinel-desktop/dist/*.zip
+            sentinel-desktop/dist/*.AppImage
+            sentinel-desktop/dist/*.deb
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Mac artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sentinel-mac
+          path: dist/
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sentinel-linux
+          path: dist/
+
+      - name: List artifacts
+        run: find dist/ -type f | head -20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: SENTINEL Desktop v${{ github.event.inputs.version }}
+          body: |
+            ## SENTINEL Desktop v${{ github.event.inputs.version }}
+
+            Native desktop app for the SENTINEL Global Intelligence Platform.
+
+            ### Downloads
+            - **Mac**: Download the `.dmg`, open it, drag SENTINEL to Applications
+            - **Linux**: Download the `.AppImage`, `chmod +x` it, and run — or install the `.deb` with `sudo dpkg -i`
+
+            ### Features
+            - Opens the live SENTINEL dashboard in a dedicated window
+            - Auto-launch at login (toggle in app menu)
+            - Always-on-top mode
+            - External links open in your default browser
+
+            ### First Run
+            On Mac you may need to right-click → Open the first time (Gatekeeper).
+          files: dist/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
