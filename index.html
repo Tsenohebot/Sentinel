@@ -1962,6 +1962,7 @@ let flightFetchInProgress = false;
 const CORS_PROXIES = [
   (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
 // Without this, a dead host hangs until the browser's own timeout, which is far
@@ -2076,6 +2077,7 @@ async function probeFlightSources() {
   await Promise.all(FLIGHT_SOURCES.map(async (s, i) => {
     const url = s.buildUrl('51.50', '-0.12', 100);
     const started = performance.now();
+    const why = [];
 
     // Direct first
     try {
@@ -2086,22 +2088,27 @@ async function probeFlightSources() {
         results[i] = { i, ok: true, via: 'direct', ms: Math.round(performance.now() - started), n };
         return;
       }
-      results[i] = { i, ok: false, note: `HTTP ${r.status}` };
+      why.push(`direct HTTP ${r.status}`);
     } catch (e) {
-      results[i] = { i, ok: false, note: e.name === 'AbortError' ? 'timeout' : 'blocked (CORS?)' };
+      why.push(`direct ${e.name === 'AbortError' ? 'timed out' : (e.message || 'blocked')}`);
     }
 
-    // Then via proxy
+    // Then via proxy — record why each one failed instead of swallowing it,
+    // so a total failure still tells you what actually happened.
     for (let p = 0; p < CORS_PROXIES.length; p++) {
       try {
         const r = await fetchTimeout(CORS_PROXIES[p](url), 8000);
-        if (!r.ok) continue;
+        if (!r.ok) { why.push(`proxy-${p} HTTP ${r.status}`); continue; }
         const d = await r.json();
         const n = (d.ac || d.aircraft || []).length;
         results[i] = { i, ok: true, via: `proxy-${p}`, ms: Math.round(performance.now() - started), n };
         return;
-      } catch { /* try the next proxy */ }
+      } catch (e) {
+        why.push(`proxy-${p} ${e.name === 'AbortError' ? 'timed out' : (e.message || 'blocked')}`);
+      }
     }
+
+    results[i] = { i, ok: false, note: why.join(', ') };
   }));
 
   results.forEach(r => {
