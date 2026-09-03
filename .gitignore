@@ -2,6 +2,8 @@
 node_modules/
 sentinel-desktop/node_modules/
 package-lock.json
+conflict_zones.json
+conflict_zones.js
 
 # Electron build output
 sentinel-desktop/dist/

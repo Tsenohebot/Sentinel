@@ -3,811 +3,1042 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENTINEL — Global Intelligence Platform</title>
+<title>Sentinel — Global Situational Awareness</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.2/dist/leaflet-velocity.min.js"></script>
 <style>
   :root {
-    --bg-primary: #0a0e17;
-    --bg-secondary: #0f1520;
-    --bg-tertiary: #141c2b;
-    --bg-panel: rgba(15, 21, 32, 0.92);
-    --border: rgba(0, 200, 255, 0.12);
-    --border-bright: rgba(0, 200, 255, 0.3);
-    --accent-cyan: #00c8ff;
-    --accent-green: #00ff88;
-    --accent-red: #ff3366;
-    --accent-amber: #ffaa00;
-    --accent-purple: #8855ff;
-    --text-primary: #e0e8f0;
-    --text-secondary: #7a8ba0;
-    --text-dim: #4a5568;
-    --glow-cyan: 0 0 20px rgba(0, 200, 255, 0.15);
-    --glow-green: 0 0 15px rgba(0, 255, 136, 0.1);
+    /* Canvas */
+    --ink-900: #080b11;
+    --ink-850: #0a0e15;
+    --ink-800: #0d1219;
+    --ink-700: #141b26;
+    --ink-600: #1a2331;
+    --line:    #1e2836;
+    --line-hi: #2c3a4d;
+
+    /* Text */
+    --text:     #dbe3ec;
+    --text-mid: #9aa8bb;
+    --text-dim: #64738a;
+
+    /* Single accent */
+    --signal:     #4da3ff;
+    --signal-dim: #2b6fb8;
+    --signal-wash: rgba(77, 163, 255, 0.10);
+
+    /* Severity ramp — only ever means severity */
+    --sev-critical: #ef4444;
+    --sev-high:     #f59e0b;
+    --sev-moderate: #eab308;
+    --sev-low:      #22c55e;
+    --sev-info:     #4da3ff;
+
+    /* Metrics */
+    --rail-w: 56px;
+    --dock-w: 352px;
+    --top-h: 48px;
+    --status-h: 30px;
+    --r-sm: 4px;
+    --r-md: 7px;
+    --r-lg: 10px;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  html, body { height: 100%; }
+
   body {
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
+    background: var(--ink-900);
+    color: var(--text);
+    font-family: 'Inter Tight', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
     overflow: hidden;
-    height: 100vh;
-    width: 100vw;
+    -webkit-font-smoothing: antialiased;
   }
 
-  .header {
-    position: fixed; top: 0; left: 0; right: 0; height: 48px;
-    background: linear-gradient(180deg, rgba(10,14,23,0.98), rgba(10,14,23,0.9));
-    border-bottom: 1px solid var(--border);
+  /* Numeric / code data only — not decoration */
+  .num, .coords, .clock, .flight-callsign, .flight-alt, .stock-price,
+  .stock-change, .stock-symbol, .sat-alt, .event-mag, .ship-name {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  a { color: var(--signal); }
+
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+  /* ══════════════ APP SHELL ══════════════ */
+  .app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ── Top bar ── */
+  .topbar {
+    height: var(--top-h); flex-shrink: 0;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px; z-index: 1000; backdrop-filter: blur(12px);
+    padding: 0 14px 0 12px;
+    background: var(--ink-850);
+    border-bottom: 1px solid var(--line);
+    z-index: 1000;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand-mark {
+    width: 15px; height: 15px; border-radius: 3px;
+    border: 1.5px solid var(--signal);
+    position: relative; flex-shrink: 0;
+  }
+  .brand-mark::after {
+    content: ''; position: absolute; inset: 3px;
+    background: var(--signal); border-radius: 1px;
+  }
+  .brand-name {
+    font-size: 15px; font-weight: 600; letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .topbar-right { display: flex; align-items: center; gap: 14px; }
+
+  .feed-state {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--text-mid);
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: var(--text-dim);
+  }
+  .dot.live { background: var(--sev-low); box-shadow: 0 0 7px var(--sev-low); }
+  .dot.sim  { background: var(--sev-high); }
+  .dot.off  { background: var(--text-dim); }
+
+  .clock { font-size: 13px; color: var(--text); font-weight: 500; }
+
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: var(--r-sm);
+    display: grid; place-items: center;
+    color: var(--text-dim); font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .icon-btn:hover { background: var(--ink-700); color: var(--text); }
+  .icon-btn.on { color: var(--signal); background: var(--signal-wash); }
+
+  /* ── Body row ── */
+  .body-row { flex: 1; display: flex; min-height: 0; position: relative; }
+
+  /* ── Left rail ── */
+  .rail {
+    width: var(--rail-w); flex-shrink: 0;
+    background: var(--ink-850);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 8px 0; gap: 2px;
+    z-index: 900;
+  }
+  .rail-item {
+    width: 40px; height: 40px; border-radius: var(--r-md);
+    display: grid; place-items: center;
+    font-size: 17px; color: var(--text-dim);
+    position: relative;
+    transition: background 0.15s, color 0.15s;
+  }
+  .rail-item:hover:not(:disabled) { background: var(--ink-700); color: var(--text); }
+  .rail-item.active { color: var(--signal); background: var(--signal-wash); }
+  /* Active edge marker — spatial anchor */
+  .rail-item.active::before {
+    content: ''; position: absolute; left: -8px; top: 9px;
+    width: 2.5px; height: 22px; border-radius: 0 2px 2px 0;
+    background: var(--signal);
+  }
+  .rail-item:disabled { opacity: 0.22; cursor: default; }
+
+  /* Feed-updated pulse — motion tied to a real event */
+  @keyframes rail-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(77,163,255,0.45); }
+    100% { box-shadow: 0 0 0 13px rgba(77,163,255,0); }
+  }
+  .rail-item.pulse { animation: rail-pulse 0.9s ease-out; }
+
+  .rail-tip {
+    position: absolute; left: calc(100% + 10px); top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--ink-600); color: var(--text);
+    font-size: 12px; white-space: nowrap;
+    padding: 4px 9px; border-radius: var(--r-sm);
+    border: 1px solid var(--line-hi);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 1200;
+  }
+  .rail-item:hover .rail-tip { opacity: 1; transform: translateY(-50%) translateX(0); }
+
+  .rail-sep { width: 22px; height: 1px; background: var(--line); margin: 7px 0; }
+  .rail-spacer { flex: 1; }
+
+  /* Overlay toggles carry severity colour when active */
+  .rail-item[data-overlay="conflicts"].active { color: var(--sev-critical); background: rgba(239,68,68,0.10); }
+  .rail-item[data-overlay="conflicts"].active::before { background: var(--sev-critical); }
+  .rail-item[data-overlay="traffic"].active { color: var(--sev-high); background: rgba(245,158,11,0.10); }
+  .rail-item[data-overlay="traffic"].active::before { background: var(--sev-high); }
+
+  /* ── Map ── */
+  #map { flex: 1; min-width: 0; background: var(--ink-900); }
+  .leaflet-container { background: var(--ink-900) !important; font-family: inherit; }
+
+  /* ── Right dock ── */
+  .dock {
+    width: var(--dock-w); flex-shrink: 0;
+    background: var(--ink-850);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    gap: 1px; overflow-y: auto; overflow-x: hidden;
+    scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent;
+    z-index: 800;
+  }
+  .dock:empty, .dock.empty { display: none; }
+  .dock::-webkit-scrollbar { width: 5px; }
+  .dock::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
+
+  .dock-empty {
+    margin: auto; padding: 32px 24px; text-align: center;
+    color: var(--text-dim); font-size: 12px; line-height: 1.6;
   }
 
-  .header-left { display: flex; align-items: center; gap: 16px; }
-
-  .logo {
-    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 16px;
-    letter-spacing: 4px; color: var(--accent-cyan);
-    text-shadow: 0 0 20px rgba(0, 200, 255, 0.4);
+  /* ── Status bar ── */
+  .statusbar {
+    height: var(--status-h); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px;
+    background: var(--ink-850);
+    border-top: 1px solid var(--line);
+    font-size: 11.5px; color: var(--text-dim);
+    z-index: 900;
   }
-  .logo-sub { font-size: 9px; letter-spacing: 3px; color: var(--text-secondary); text-transform: uppercase; }
+  .coords { letter-spacing: 0.02em; }
+  .statusbar-right { display: flex; align-items: center; gap: 12px; }
 
-  .header-status { display: flex; align-items: center; gap: 20px; font-size: 11px; color: var(--text-secondary); }
-
-  .status-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    box-shadow: 0 0 8px var(--accent-green);
-    animation: pulse 2s infinite; display: inline-block; margin-right: 6px;
+  .segmented {
+    display: flex; background: var(--ink-700);
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    overflow: hidden;
   }
-  .status-dot.live { background: var(--accent-green); }
-  .status-dot.sim { background: var(--accent-amber); }
-  .status-dot.off { background: var(--accent-red); }
+  .seg {
+    padding: 3px 11px; font-size: 11.5px; color: var(--text-dim);
+    transition: background 0.15s, color 0.15s;
+  }
+  .seg:hover { color: var(--text); }
+  .seg.active { background: var(--signal-wash); color: var(--signal); }
 
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-  .header-time { font-family: 'Orbitron', sans-serif; font-size: 13px; color: var(--accent-cyan); letter-spacing: 2px; }
-
-  #map { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; z-index: 1; }
-  .leaflet-container { background: var(--bg-primary) !important; }
-
+  /* ══════════════ PANELS ══════════════ */
   .panel {
-    position: fixed; z-index: 500;
-    background: var(--bg-panel); border: 1px solid var(--border);
-    border-radius: 8px; backdrop-filter: blur(16px);
-    box-shadow: var(--glow-cyan), 0 8px 32px rgba(0,0,0,0.5);
-    overflow: hidden; transition: opacity 0.3s, transform 0.3s;
+    background: var(--ink-800);
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+    max-height: 46vh;
   }
-  .panel.hidden { opacity: 0; pointer-events: none; transform: translateY(10px); }
+  .panel.hidden { display: none; }
+
+  /* Torn-off (dragged) state */
+  .panel.floating {
+    position: fixed; width: var(--dock-w);
+    border: 1px solid var(--line-hi); border-radius: var(--r-lg);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    overflow: hidden; z-index: 700;
+  }
+  .panel.dragging { box-shadow: 0 20px 60px rgba(0,0,0,0.75); border-color: var(--signal-dim); }
 
   .panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; border-bottom: 1px solid var(--border);
-    background: rgba(0, 200, 255, 0.03);
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    cursor: grab; user-select: none; -webkit-user-select: none;
+    flex-shrink: 0;
   }
-
+  .panel-header:active { cursor: grabbing; }
   .panel-title {
-    font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
-    letter-spacing: 3px; color: var(--accent-cyan); text-transform: uppercase;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    flex: 1; min-width: 0;
   }
-
   .panel-badge {
-    font-size: 9px; padding: 2px 8px; border-radius: 10px;
-    letter-spacing: 1px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; padding: 2px 7px; border-radius: 3px;
+    background: var(--ink-600); color: var(--text-mid);
+    white-space: nowrap;
   }
-  .badge-live { background: rgba(0,255,136,0.1); color: var(--accent-green); border: 1px solid rgba(0,255,136,0.2); }
-  .badge-sim { background: rgba(255,170,0,0.1); color: var(--accent-amber); border: 1px solid rgba(255,170,0,0.2); }
-  .badge-count { background: rgba(0,200,255,0.1); color: var(--accent-cyan); border: 1px solid rgba(0,200,255,0.2); }
+  .badge-live { background: rgba(34,197,94,0.12); color: var(--sev-low); }
+  .badge-sim  { background: rgba(245,158,11,0.12); color: var(--sev-high); }
+  .badge-count { background: var(--signal-wash); color: var(--signal); }
 
   .panel-body {
-    padding: 10px 14px; overflow-y: auto;
-    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    padding: 4px 12px 10px; overflow-y: auto; flex: 1;
+    scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent;
   }
-  .panel-body::-webkit-scrollbar { width: 4px; }
-  .panel-body::-webkit-scrollbar-track { background: transparent; }
-  .panel-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+  .panel-body::-webkit-scrollbar { width: 5px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
 
-  /* FLIGHTS */
-  .panel-flights { top: 58px; left: 12px; width: 340px; max-height: calc(50vh - 40px); }
-
-  .flight-item {
+  /* ── Generic list row ── */
+  .row {
     display: flex; align-items: center; gap: 10px;
-    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
-    cursor: pointer; transition: background 0.2s;
+    padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.035);
+    cursor: pointer;
   }
-  .flight-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
-  .flight-icon { font-size: 16px; width: 28px; text-align: center; }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .row-ico { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; color: var(--text-mid); }
+  .row-main { flex: 1; min-width: 0; }
+  .row-t { font-size: 13px; font-weight: 500; color: var(--text); }
+  .row-s { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }
+  .row-end { text-align: right; flex-shrink: 0; font-size: 11.5px; color: var(--text-dim); }
+
+  /* ── Flights ── */
+  .flight-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; }
+  .flight-item:last-child { border-bottom: none; }
+  .flight-item:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .flight-icon { font-size: 14px; width: 22px; text-align: center; color: var(--signal); flex-shrink: 0; }
   .flight-info { flex: 1; min-width: 0; }
-  .flight-callsign { font-size: 12px; font-weight: 700; color: var(--accent-cyan); letter-spacing: 1px; }
-  .flight-route { font-size: 10px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .flight-alt { font-size: 10px; color: var(--text-dim); text-align: right; white-space: nowrap; }
-  .flight-alt span { color: var(--accent-green); font-weight: 500; }
+  .flight-callsign { font-size: 13px; font-weight: 500; color: var(--text); }
+  .flight-route { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flight-alt { font-size: 11.5px; color: var(--text-dim); text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .flight-alt span { color: var(--text-mid); }
 
-  /* SHIPPING */
-  .panel-shipping { top: 58px; right: 12px; width: 340px; max-height: calc(50vh - 40px); }
-  .ship-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
-  .ship-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
-  .ship-icon { font-size: 16px; width: 28px; text-align: center; }
-  .ship-name { font-size: 12px; font-weight: 700; color: var(--accent-amber); letter-spacing: 1px; }
-  .ship-detail { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
-  .ship-status { font-size: 9px; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; font-weight: 500; }
-  .ship-status.transit { background: rgba(0,200,255,0.1); color: var(--accent-cyan); }
-  .ship-status.port { background: rgba(0,255,136,0.1); color: var(--accent-green); }
-  .ship-status.delayed { background: rgba(255,51,102,0.1); color: var(--accent-red); }
+  /* ── Shipping ── */
+  .ship-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; }
+  .ship-item:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .ship-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+  .ship-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .ship-detail { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }
+  .ship-status { font-size: 10.5px; padding: 2px 6px; border-radius: 3px; flex-shrink: 0; }
+  .ship-status.transit { background: var(--signal-wash); color: var(--signal); }
+  .ship-status.port { background: rgba(34,197,94,0.12); color: var(--sev-low); }
+  .ship-status.delayed { background: rgba(239,68,68,0.12); color: var(--sev-critical); }
 
-  /* NEWS */
-  .panel-news { bottom: 12px; left: 12px; width: 440px; max-height: calc(50vh - 20px); }
-  .news-item { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
-  .news-item:hover { background: rgba(0,200,255,0.05); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  /* ── News ── */
+  .tabs { display: flex; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .tab {
+    flex: 1; padding: 9px 12px; font-size: 12.5px; font-weight: 500;
+    color: var(--text-dim); border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab:hover { color: var(--text-mid); }
+  .tab.active { color: var(--signal); border-bottom-color: var(--signal); }
+
+  .chips { display: flex; gap: 5px; padding: 9px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; flex-shrink: 0; }
+  .chip {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 11px;
+    border: 1px solid var(--line); color: var(--text-dim);
+    transition: all 0.15s;
+  }
+  .chip:hover { border-color: var(--line-hi); color: var(--text-mid); }
+  .chip.active { border-color: var(--signal-dim); color: var(--signal); background: var(--signal-wash); }
+
+  .local-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+  }
+  .local-country { font-size: 13px; font-weight: 600; color: var(--text); }
+  .local-hint { font-size: 11.5px; color: var(--text-dim); }
+
+  .news-item { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; }
+  .news-item:last-child { border-bottom: none; }
+  .news-item:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
   .news-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .news-source { font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--accent-cyan); text-transform: uppercase; }
-  .news-time { font-size: 9px; color: var(--text-dim); }
-  .news-region-tag { font-size: 8px; padding: 1px 6px; border-radius: 3px; background: rgba(136,85,255,0.15); color: var(--accent-purple); letter-spacing: 1px; }
-  .news-headline { font-size: 12px; color: var(--text-primary); line-height: 1.5; }
-  .news-severity { display: inline-block; width: 4px; height: 4px; border-radius: 50%; margin-right: 6px; }
-  .severity-high { background: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
-  .severity-med { background: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
-  .severity-low { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+  .news-source { font-size: 11px; font-weight: 600; color: var(--text-mid); }
+  .news-time { font-size: 11px; color: var(--text-dim); }
+  .news-region-tag { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--ink-600); color: var(--text-dim); }
+  .news-headline { font-size: 13px; color: var(--text); line-height: 1.45; display: flex; gap: 7px; }
+  .news-severity { width: 5px; height: 5px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+  .severity-high { background: var(--sev-critical); }
+  .severity-med  { background: var(--sev-high); }
+  .severity-low  { background: var(--text-dim); }
 
-  .region-selector { display: flex; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-  .region-btn {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 3px 8px;
-    border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
-    border-radius: 4px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s;
-  }
-  .region-btn:hover, .region-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
-
-  /* NEWS TABS */
-  .news-tabs {
-    display: flex; border-bottom: 1px solid var(--border);
-  }
-  .news-tab {
-    flex: 1; padding: 8px 14px; font-family: 'Orbitron', sans-serif;
-    font-size: 9px; letter-spacing: 2px; text-align: center; cursor: pointer;
-    background: transparent; border: none; color: var(--text-dim);
-    border-bottom: 2px solid transparent; transition: all 0.2s;
-  }
-  .news-tab:hover { color: var(--text-secondary); }
-  .news-tab.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); background: rgba(0,200,255,0.03); }
-  .news-local-header {
-    padding: 8px 14px; border-bottom: 1px solid var(--border);
-    font-size: 10px; color: var(--text-secondary); display: flex;
-    align-items: center; justify-content: space-between;
-  }
-  .news-local-country {
-    font-family: 'Orbitron', sans-serif; font-size: 11px;
-    color: var(--accent-amber); letter-spacing: 1px; font-weight: 700;
-  }
-  .news-local-hint {
-    font-size: 9px; color: var(--text-dim); font-style: italic;
-  }
-
-  /* STOCKS */
-  .panel-stocks { bottom: 12px; right: 12px; width: 360px; max-height: calc(50vh - 20px); }
-
-  /* SATELLITE PANEL */
-  .panel-satellites { top: 58px; right: 368px; width: 320px; max-height: calc(50vh - 40px); }
-  .sat-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.2s; }
-  .sat-item:hover { background: rgba(136,85,255,0.08); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
-  .sat-item.iss-item { border-left: 2px solid var(--accent-green); padding-left: 8px; }
-  .sat-icon { font-size: 16px; width: 28px; text-align: center; }
-  .sat-name { font-size: 12px; font-weight: 700; color: var(--accent-purple); letter-spacing: 1px; }
-  .sat-name.iss { color: var(--accent-green); }
-  .sat-detail { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
-  .sat-alt { font-size: 10px; color: var(--text-dim); text-align: right; white-space: nowrap; }
-  .sat-alt span { color: var(--accent-purple); font-weight: 500; }
-  .iss-orbit-line { stroke: var(--accent-green); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; opacity: 0.5; }
-
-  /* TRAFFIC LAYER TOGGLE */
-  .traffic-toggle {
-    position: fixed; bottom: 46px; left: calc(50% + 110px); z-index: 600;
-    display: flex; flex-direction: row; gap: 4px;
-  }
-  .traffic-btn {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px;
-    padding: 5px 10px; border: 1px solid var(--border); background: rgba(15,21,32,0.8);
-    color: var(--text-secondary); cursor: pointer; border-radius: 4px; letter-spacing: 1px;
-    backdrop-filter: blur(8px); transition: all 0.2s;
-  }
-  .traffic-btn:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
-  .traffic-btn.active { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,170,0,0.1); }
-
-  /* CONFLICT ZONES */
-  @keyframes conflict-pulse {
-    0%   { opacity: 0.35; transform: scale(1); }
-    50%  { opacity: 0.12; transform: scale(1.25); }
-    100% { opacity: 0.35; transform: scale(1); }
-  }
-  @keyframes conflict-ring {
-    0%   { opacity: 0.5; r: 8; }
-    100% { opacity: 0; r: 28; }
-  }
-  .conflict-toggle {
-    position: fixed; bottom: 46px; left: calc(50% + 190px); z-index: 600;
-    display: flex; flex-direction: row; gap: 4px;
-  }
-  .conflict-btn {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px;
-    padding: 5px 10px; border: 1px solid var(--border); background: rgba(15,21,32,0.8);
-    color: var(--text-secondary); cursor: pointer; border-radius: 4px; letter-spacing: 1px;
-    backdrop-filter: blur(8px); transition: all 0.2s;
-  }
-  .conflict-btn:hover { border-color: #ff4444; color: #ff4444; }
-  .conflict-btn.active { border-color: #ff4444; color: #ff4444; background: rgba(255,68,68,0.1); }
-  .conflict-popup { font-family: 'JetBrains Mono', monospace; }
-  .conflict-popup .leaflet-popup-content-wrapper {
-    background: rgba(15,21,32,0.95); border: 1px solid rgba(255,68,68,0.3);
-    border-radius: 8px; color: var(--text-primary); box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  }
-  .conflict-popup .leaflet-popup-tip { background: rgba(15,21,32,0.95); }
-  .conflict-popup-title {
-    font-family: 'Orbitron', sans-serif; font-size: 11px; font-weight: 700;
-    letter-spacing: 1px; margin-bottom: 6px;
-  }
-  .conflict-popup-type { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 4px; }
-  .conflict-popup-detail { font-size: 10px; color: var(--text-secondary); line-height: 1.5; }
-  .conflict-popup-severity {
-    display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: 1px;
-    padding: 2px 6px; border-radius: 3px; margin-top: 6px;
-  }
-  .sev-critical { background: rgba(255,50,50,0.2); color: #ff5050; border: 1px solid rgba(255,50,50,0.3); }
-  .sev-high { background: rgba(255,140,0,0.2); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
-  .sev-moderate { background: rgba(255,220,50,0.15); color: #ffdc32; border: 1px solid rgba(255,220,50,0.2); }
-  .sev-low { background: rgba(100,200,255,0.15); color: #64c8ff; border: 1px solid rgba(100,200,255,0.2); }
-
-  /* WEATHER LOCATION INFO */
-  .weather-location {
-    margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
-  }
-  .weather-location-name {
-    font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
-    color: var(--text-primary); letter-spacing: 1px; margin-bottom: 2px;
-  }
-  .weather-location-region {
-    font-size: 10px; color: var(--text-secondary); letter-spacing: 0.5px;
-  }
-  .weather-wiki-summary {
-    font-size: 11px; color: var(--text-secondary); line-height: 1.5;
-    margin-top: 8px; max-height: 80px; overflow-y: auto;
-    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-  }
-  .weather-wiki-summary::-webkit-scrollbar { width: 3px; }
-  .weather-wiki-summary::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
-  .weather-wiki-link {
-    font-size: 9px; color: var(--accent-cyan); text-decoration: none;
-    letter-spacing: 0.5px; display: inline-block; margin-top: 4px;
-  }
-  .weather-wiki-link:hover { text-decoration: underline; }
-  .stock-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
-  .stock-left { display: flex; align-items: center; gap: 10px; }
-  .stock-symbol { font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700; color: var(--text-primary); min-width: 50px; }
-  .stock-name { font-size: 10px; color: var(--text-secondary); }
+  /* ── Stocks ── */
+  .stock-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.035); }
+  .stock-item:last-child { border-bottom: none; }
+  .stock-symbol { font-size: 13px; font-weight: 700; color: var(--text); }
+  .stock-name { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; font-family: 'Inter Tight', sans-serif; }
   .stock-right { text-align: right; }
-  .stock-price { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .stock-change { font-size: 11px; font-weight: 500; margin-top: 2px; }
-  .stock-up { color: var(--accent-green); }
-  .stock-down { color: var(--accent-red); }
-  .stock-sparkline { height: 30px; margin-top: 4px; }
+  .stock-price { font-size: 14px; font-weight: 500; }
+  .stock-change { font-size: 11.5px; margin-top: 1px; }
+  .stock-up { color: var(--sev-low); }
+  .stock-down { color: var(--sev-critical); }
+  .stock-sparkline { height: 24px; margin-top: 3px; }
   .stock-sparkline canvas { width: 100%; height: 100%; }
 
-  .panel-toggles { display: flex; gap: 4px; }
-  .toggle-btn {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 4px 10px;
-    border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
-    border-radius: 4px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s;
+  /* ── Satellites ── */
+  .sat-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; }
+  .sat-item:last-child { border-bottom: none; }
+  .sat-item:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .sat-item.iss-item { border-left: 2px solid var(--sev-low); padding-left: 8px; }
+  .sat-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+  .sat-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .sat-name.iss { color: var(--sev-low); }
+  .sat-detail { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }
+  .sat-alt { font-size: 11.5px; color: var(--text-dim); text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .sat-alt span { color: var(--text-mid); }
+
+  /* ── Events ── */
+  .event-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; }
+  .event-item:last-child { border-bottom: none; }
+  .event-item:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .event-icon { font-size: 14px; width: 22px; text-align: center; flex-shrink: 0; }
+  .event-info { flex: 1; min-width: 0; }
+  .event-title { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.4; }
+  .event-meta { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+  .event-mag { font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .ev-red { color: var(--sev-critical); }
+  .ev-orange { color: var(--sev-high); }
+  .ev-green { color: var(--sev-low); }
+  .ev-cyan { color: var(--signal); }
+
+  /* ══════════════ MAP OVERLAYS ══════════════ */
+  /* Glow is reserved for live data on the map, never for chrome */
+  @keyframes event-ping {
+    0%   { transform: scale(0.6); opacity: 0.85; }
+    70%, 100% { transform: scale(2.4); opacity: 0; }
   }
-  .toggle-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
-  .toggle-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+  .event-ping { border-radius: 50%; position: absolute; inset: 0; animation: event-ping 2.4s cubic-bezier(0,0,0.2,1) infinite; }
 
-  .scanline {
-    position: fixed; top: 48px; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(0,200,255,0.15), transparent);
-    z-index: 999; animation: scanMove 8s linear infinite; pointer-events: none;
-  }
-  @keyframes scanMove { 0% { top: 48px; } 100% { top: 100vh; } }
-
-  .map-coords {
-    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
-    z-index: 500; font-size: 10px; color: var(--text-dim);
-    background: var(--bg-panel); padding: 4px 16px; border-radius: 12px;
-    border: 1px solid var(--border); backdrop-filter: blur(8px); letter-spacing: 2px;
+  @keyframes conflict-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50%      { opacity: 0.12; transform: scale(1.25); }
   }
 
-  .leaflet-control-zoom { border: 1px solid var(--border) !important; border-radius: 6px !important; overflow: hidden; }
-  .leaflet-control-zoom a { background: var(--bg-secondary) !important; color: var(--accent-cyan) !important; border-color: var(--border) !important; }
-  .leaflet-control-zoom a:hover { background: var(--bg-tertiary) !important; }
+  .leaflet-popup-content-wrapper {
+    background: var(--ink-700); border: 1px solid var(--line-hi);
+    border-radius: var(--r-md); color: var(--text);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+  }
+  .leaflet-popup-tip { background: var(--ink-700); border: 1px solid var(--line-hi); }
+  .leaflet-popup-content { margin: 11px 13px; font-family: inherit; }
+  .leaflet-popup-close-button { color: var(--text-dim) !important; }
 
-  /* CONFIG MODAL */
+  .conflict-popup-title, .event-popup-title {
+    font-size: 13px; font-weight: 600; margin-bottom: 5px; line-height: 1.35;
+  }
+  .conflict-popup-type, .event-popup-meta {
+    font-size: 11.5px; color: var(--text-dim); margin-bottom: 6px;
+  }
+  .conflict-popup-detail, .event-popup-detail {
+    font-size: 12px; color: var(--text-mid); line-height: 1.5;
+  }
+  .event-popup-link { font-size: 11.5px; display: inline-block; margin-top: 7px; text-decoration: none; }
+  .event-popup-link:hover { text-decoration: underline; }
+  .conflict-popup-severity {
+    display: inline-block; font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 3px; margin-top: 7px;
+  }
+  .sev-critical { background: rgba(239,68,68,0.14); color: var(--sev-critical); }
+  .sev-high     { background: rgba(245,158,11,0.14); color: var(--sev-high); }
+  .sev-moderate { background: rgba(234,179,8,0.14); color: var(--sev-moderate); }
+  .sev-low      { background: rgba(77,163,255,0.14); color: var(--signal); }
+
+  .leaflet-tooltip {
+    background: var(--ink-700); border: 1px solid var(--line-hi);
+    color: var(--text); font-family: inherit; font-size: 12px;
+    border-radius: var(--r-sm); box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  }
+  .leaflet-tooltip-top:before { border-top-color: var(--line-hi); }
+
+  .leaflet-control-zoom { border: 1px solid var(--line) !important; border-radius: var(--r-md) !important; overflow: hidden; }
+  .leaflet-control-zoom a {
+    background: var(--ink-800) !important; color: var(--text-mid) !important;
+    border-color: var(--line) !important;
+  }
+  .leaflet-control-zoom a:hover { background: var(--ink-700) !important; color: var(--text) !important; }
+
+  /* ══════════════ WEATHER SHEET ══════════════ */
+  .weather-panel {
+    position: fixed; z-index: 1100;
+    background: var(--ink-800); border: 1px solid var(--line-hi);
+    border-radius: var(--r-lg); padding: 14px 16px; width: 340px;
+    box-shadow: 0 18px 52px rgba(0,0,0,0.65);
+    max-height: 78vh; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent;
+  }
+  .weather-panel.hidden { display: none; }
+  .weather-panel::-webkit-scrollbar { width: 5px; }
+  .weather-panel::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
+  .weather-panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 11px; padding-bottom: 9px; border-bottom: 1px solid var(--line);
+  }
+  .weather-panel-header h3 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .weather-close { color: var(--text-dim); font-size: 17px; line-height: 1; padding: 0 3px; }
+  .weather-close:hover { color: var(--text); }
+  .weather-location { margin-bottom: 12px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+  .weather-location-name { font-size: 16px; font-weight: 600; color: var(--text); }
+  .weather-location-region { font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+  .weather-wiki-summary {
+    font-size: 12.5px; color: var(--text-mid); line-height: 1.55; margin-top: 8px;
+    max-height: 84px; overflow-y: auto; scrollbar-width: thin;
+  }
+  .weather-wiki-link { font-size: 11.5px; text-decoration: none; display: inline-block; margin-top: 6px; }
+  .weather-wiki-link:hover { text-decoration: underline; }
+  .weather-main { display: flex; align-items: center; gap: 14px; margin-bottom: 13px; }
+  .weather-icon { font-size: 38px; line-height: 1; }
+  .weather-temp { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 500; line-height: 1; }
+  .weather-temp small { font-size: 15px; color: var(--text-dim); }
+  .weather-desc { font-size: 13px; color: var(--text-mid); margin-top: 4px; }
+  .weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 16px; font-size: 12.5px; }
+  .wg-label { color: var(--text-dim); font-size: 11.5px; }
+  .wg-value { color: var(--text); font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+  .weather-forecast {
+    margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line);
+    display: flex; gap: 4px; justify-content: space-between;
+  }
+  .weather-forecast-hour { text-align: center; font-size: 11px; color: var(--text-dim); }
+  .wfh-icon { font-size: 15px; margin: 2px 0; }
+  .wfh-temp { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text); font-size: 12px; }
+  .weather-coords { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
+
+  /* ══════════════ MODAL ══════════════ */
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2000;
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(4px);
+    position: fixed; inset: 0; background: rgba(4,6,10,0.78);
+    z-index: 2000; display: grid; place-items: center;
+    backdrop-filter: blur(3px); padding: 20px;
   }
   .modal-overlay.hidden { display: none; }
   .modal {
-    background: var(--bg-secondary); border: 1px solid var(--border-bright);
-    border-radius: 12px; padding: 30px; width: 520px; max-width: 90vw;
-    box-shadow: 0 0 60px rgba(0,200,255,0.1);
+    background: var(--ink-800); border: 1px solid var(--line-hi);
+    border-radius: 12px; padding: 26px; width: 480px; max-width: 100%;
+    max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.7);
   }
-  .modal h2 {
-    font-family: 'Orbitron', sans-serif; font-size: 16px; color: var(--accent-cyan);
-    letter-spacing: 4px; margin-bottom: 6px;
-  }
-  .modal p { font-size: 11px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
-  .modal label {
-    display: block; font-size: 10px; letter-spacing: 2px; color: var(--text-secondary);
-    text-transform: uppercase; margin-bottom: 6px; margin-top: 16px;
-  }
+  .modal h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .modal > p { font-size: 13px; color: var(--text-mid); margin-bottom: 20px; line-height: 1.55; }
+  .modal label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-mid); margin: 16px 0 6px; }
   .modal input {
-    width: 100%; padding: 10px 14px; background: var(--bg-primary);
-    border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none;
-    transition: border-color 0.2s;
+    width: 100%; padding: 9px 12px; background: var(--ink-900);
+    border: 1px solid var(--line); border-radius: var(--r-md); color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 12.5px; outline: none;
+    transition: border-color 0.15s;
   }
-  .modal input:focus { border-color: var(--accent-cyan); }
+  .modal input:focus { border-color: var(--signal-dim); }
   .modal input::placeholder { color: var(--text-dim); }
-  .modal-hint { font-size: 9px; color: var(--text-dim); margin-top: 4px; }
-  .modal-hint a { color: var(--accent-cyan); text-decoration: none; }
+  .modal-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 5px; }
+  .modal-hint a { text-decoration: none; }
   .modal-hint a:hover { text-decoration: underline; }
-  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
-  .btn-primary {
-    flex: 1; padding: 10px; background: rgba(0,200,255,0.12); border: 1px solid var(--accent-cyan);
-    color: var(--accent-cyan); font-family: 'Orbitron', sans-serif; font-size: 11px;
-    letter-spacing: 2px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+  .modal-actions { display: flex; gap: 9px; margin-top: 24px; }
+  .btn {
+    flex: 1; padding: 10px; border-radius: var(--r-md);
+    font-size: 13px; font-weight: 500; transition: all 0.15s;
   }
-  .btn-primary:hover { background: rgba(0,200,255,0.2); }
-  .btn-secondary {
-    flex: 1; padding: 10px; background: transparent; border: 1px solid var(--border);
-    color: var(--text-secondary); font-family: 'Orbitron', sans-serif; font-size: 11px;
-    letter-spacing: 2px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
-  }
-  .btn-secondary:hover { border-color: var(--text-secondary); }
+  .btn-primary { background: var(--signal); color: var(--ink-900); font-weight: 600; }
+  .btn-primary:hover { background: #63b0ff; }
+  .btn-secondary { border: 1px solid var(--line-hi); color: var(--text-mid); }
+  .btn-secondary:hover { border-color: var(--text-dim); color: var(--text); }
 
-  .config-btn {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 4px 10px;
-    border: 1px solid rgba(0,200,255,0.3); background: rgba(0,200,255,0.08);
-    color: var(--accent-cyan); border-radius: 4px; cursor: pointer;
-    letter-spacing: 1px; transition: all 0.2s;
-  }
-  .config-btn:hover { background: rgba(0,200,255,0.15); }
-
-  /* Loading states */
-  .loading-msg {
-    text-align: center; padding: 20px; color: var(--text-dim); font-size: 11px;
-    letter-spacing: 1px;
-  }
-  .loading-msg .spinner {
-    display: inline-block; width: 16px; height: 16px;
-    border: 2px solid var(--border); border-top-color: var(--accent-cyan);
-    border-radius: 50%; animation: spin 0.8s linear infinite;
-    margin-right: 8px; vertical-align: middle;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .error-msg {
-    text-align: center; padding: 12px; color: var(--accent-red); font-size: 10px;
-    background: rgba(255,51,102,0.05); border-radius: 6px; margin: 8px 0;
-  }
-
-  /* Flight cluster count */
-  .flight-count-overlay {
-    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
-    z-index: 600; font-size: 10px; padding: 4px 14px; border-radius: 12px;
-    background: var(--bg-panel); border: 1px solid var(--border);
-    backdrop-filter: blur(8px); color: var(--text-secondary); letter-spacing: 1px;
-  }
-
-  /* Debug log */
+  /* ══════════════ ACTIVITY LOG ══════════════ */
   .debug-log {
-    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
-    z-index: 900; width: 500px; max-height: 180px; overflow-y: auto;
-    background: rgba(10,14,23,0.95); border: 1px solid var(--border-bright);
-    border-radius: 8px; padding: 8px 12px; font-size: 10px;
-    color: var(--text-secondary); line-height: 1.6;
-    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-    backdrop-filter: blur(12px);
+    position: fixed; right: calc(var(--dock-w) + 16px); top: calc(var(--top-h) + 12px);
+    z-index: 1200; width: 420px; max-height: 200px; overflow-y: auto;
+    background: var(--ink-800); border: 1px solid var(--line-hi);
+    border-radius: var(--r-lg); padding: 10px 13px;
+    font-size: 12px; color: var(--text-mid);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.6);
+    scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent;
   }
   .debug-log.hidden { display: none; }
-  .debug-log .log-entry { border-bottom: 1px solid rgba(255,255,255,0.03); padding: 2px 0; }
-  .debug-log .log-time { color: var(--text-dim); margin-right: 8px; }
-  .debug-log .log-ok { color: var(--accent-green); }
-  .debug-log .log-warn { color: var(--accent-amber); }
-  .debug-log .log-err { color: var(--accent-red); }
-  .debug-log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  .debug-log-header span { font-family: 'Orbitron', sans-serif; font-size: 9px; letter-spacing: 2px; color: var(--accent-cyan); }
-
-  /* Weather Panel */
-  .weather-panel {
-    position: fixed; z-index: 700; background: rgba(10,14,23,0.94);
-    border: 1px solid var(--border-bright); border-radius: 10px;
-    padding: 14px 18px; width: 380px; backdrop-filter: blur(14px);
-    pointer-events: auto; max-height: 80vh; overflow-y: auto;
-    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-  }
-  .weather-panel.hidden { display: none; }
-  .weather-panel-header {
+  .debug-log::-webkit-scrollbar { width: 5px; }
+  .debug-log::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
+  .debug-log-header {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid var(--line);
   }
-  .weather-panel-header h3 {
-    font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 2px;
-    color: var(--accent-cyan); margin: 0;
+  .debug-log-header span { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .log-entry {
+    padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    display: flex; gap: 9px; line-height: 1.5;
   }
-  .weather-close {
-    background: none; border: none; color: var(--text-dim); cursor: pointer;
-    font-size: 16px; padding: 0 2px; line-height: 1;
+  .log-time { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; flex-shrink: 0; }
+  .log-ok { color: var(--text-mid); }
+  .log-warn { color: var(--sev-high); }
+  .log-err { color: var(--sev-critical); }
+
+  /* ══════════════ STATES ══════════════ */
+  .loading-msg { text-align: center; padding: 22px 12px; color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
+  .spinner {
+    display: inline-block; width: 13px; height: 13px; vertical-align: -2px;
+    border: 2px solid var(--line-hi); border-top-color: var(--signal);
+    border-radius: 50%; animation: spin 0.75s linear infinite; margin-right: 8px;
   }
-  .weather-close:hover { color: var(--text-primary); }
-  .weather-main {
-    display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
-  }
-  .weather-icon { font-size: 38px; line-height: 1; }
-  .weather-temp {
-    font-family: 'Orbitron', sans-serif; font-size: 28px; font-weight: 700;
-    color: var(--text-primary); line-height: 1;
-  }
-  .weather-temp small { font-size: 14px; color: var(--text-secondary); font-weight: 400; }
-  .weather-desc {
-    font-size: 12px; color: var(--text-secondary); margin-top: 2px;
-  }
-  .weather-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px;
-    font-size: 11px; color: var(--text-secondary);
-  }
-  .weather-grid .wg-label { color: var(--text-dim); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
-  .weather-grid .wg-value { color: var(--text-primary); font-weight: 500; }
-  .weather-forecast {
-    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
-    display: flex; gap: 6px; justify-content: space-between;
-  }
-  .weather-forecast-hour {
-    text-align: center; font-size: 10px; color: var(--text-secondary);
-  }
-  .weather-forecast-hour .wfh-temp { font-weight: 600; color: var(--text-primary); font-size: 11px; }
-  .weather-forecast-hour .wfh-icon { font-size: 16px; }
-  .weather-coords {
-    font-size: 9px; color: var(--text-dim); margin-top: 8px; letter-spacing: 0.5px;
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg {
+    padding: 11px 12px; margin: 8px 0; border-radius: var(--r-md);
+    background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+    color: var(--sev-critical); font-size: 12.5px; line-height: 1.5;
   }
 
-  /* Layer control */
-  .layer-control {
-    position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%); z-index: 600;
-    display: flex; flex-direction: row; gap: 4px;
+  /* ══════════════ WEATHER LAYERS ══════════════ */
+  .wx-toggle {
+    display: flex; align-items: center; gap: 11px;
+    padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.035);
+    cursor: pointer; user-select: none;
   }
-  .layer-btn {
-    background: var(--bg-panel); border: 1px solid var(--border);
-    color: var(--text-secondary); font-size: 9px; font-family: 'Orbitron', sans-serif;
-    letter-spacing: 1px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
-    backdrop-filter: blur(8px); transition: all 0.2s;
+  .wx-toggle:hover { background: rgba(255,255,255,0.025); margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .wx-sw {
+    width: 32px; height: 18px; border-radius: 9px; flex-shrink: 0;
+    background: var(--ink-600); border: 1px solid var(--line-hi);
+    position: relative; transition: background 0.18s, border-color 0.18s;
   }
-  .layer-btn:hover { border-color: var(--border-bright); color: var(--text-primary); }
-  .layer-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,200,255,0.08); }
+  .wx-sw::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--text-dim); transition: transform 0.18s, background 0.18s;
+  }
+  .wx-sw.on { background: var(--signal-wash); border-color: var(--signal-dim); }
+  .wx-sw.on::after { transform: translateX(14px); background: var(--signal); }
+  .wx-label { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .wx-label em { display: block; font-style: normal; font-size: 11.5px; color: var(--text-dim); font-weight: 400; margin-top: 1px; }
 
-  /* ==================== MOBILE RESPONSIVE ==================== */
-  @media (max-width: 768px) {
-    /* HEADER: two-row layout */
-    .header {
-      height: auto; flex-wrap: wrap; padding: 6px 10px; gap: 4px;
-    }
-    .header-left {
-      width: 100%; justify-content: space-between;
-    }
-    .logo { font-size: 13px; letter-spacing: 3px; }
-    .logo-sub { font-size: 7px; letter-spacing: 2px; }
+  .wx-timeline { padding: 12px 0 4px; border-bottom: 1px solid rgba(255,255,255,0.035); }
+  .wx-timeline.hidden, .wx-legend.hidden { display: none; }
+  .wx-timeline-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .wx-play {
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    background: var(--signal-wash); color: var(--signal);
+    border: 1px solid var(--signal-dim); font-size: 10px;
+    display: grid; place-items: center;
+  }
+  .wx-play:hover { background: rgba(77,163,255,0.18); }
+  .wx-frame-time {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-mid);
+    font-variant-numeric: tabular-nums;
+  }
+  .wx-scrub {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+    background: var(--ink-600); border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .wx-scrub::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--signal); cursor: pointer; border: 2px solid var(--ink-800);
+  }
+  .wx-scrub::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink-800);
+    background: var(--signal); cursor: pointer;
+  }
 
-    .panel-toggles {
-      width: 100%; overflow-x: auto; white-space: nowrap; gap: 3px;
-      padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+  .wx-legend { padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.035); }
+  .wx-legend-title { font-size: 11.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .wx-ramp { height: 8px; border-radius: 2px; }
+  .wx-ramp-labels {
+    display: flex; justify-content: space-between; margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-dim);
+  }
+  .wx-scale { height: 7px; border-radius: 2px; margin-top: 9px; }
+  .wx-credit { font-size: 11px; color: var(--text-dim); line-height: 1.55; padding-top: 11px; }
+  .wx-credit a { text-decoration: none; }
+  .wx-credit a:hover { text-decoration: underline; }
+
+  /* leaflet-velocity draws into the overlay pane; keep it under the markers */
+  .leaflet-pane .velocity-overlay { pointer-events: none; }
+
+  /* ══════════════ FLIGHT TRACKER ══════════════ */
+  .trk-search { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .trk-input {
+    flex: 1; min-width: 0; padding: 7px 10px;
+    background: var(--ink-900); border: 1px solid var(--line);
+    border-radius: var(--r-md); color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .trk-input:focus { border-color: var(--signal-dim); }
+  .trk-input::placeholder { color: var(--text-dim); font-size: 11.5px; }
+  .trk-go {
+    width: 32px; border-radius: var(--r-md); flex-shrink: 0;
+    background: var(--signal-wash); color: var(--signal);
+    border: 1px solid var(--signal-dim); font-size: 13px;
+  }
+  .trk-go:hover { background: rgba(77,163,255,0.18); }
+
+  .trk-card { border-bottom: 1px solid var(--line); padding: 13px 12px; background: var(--ink-700); }
+  .trk-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .trk-id { flex: 1; min-width: 0; }
+  .trk-call { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--text); }
+  .trk-airline { font-size: 12px; color: var(--text-mid); margin-top: 1px; }
+  .trk-state {
+    font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 3px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .trk-enroute  { background: rgba(34,197,94,0.13);  color: var(--sev-low); }
+  .trk-climb    { background: rgba(77,163,255,0.13); color: var(--signal); }
+  .trk-descend  { background: rgba(245,158,11,0.13); color: var(--sev-high); }
+  .trk-ground   { background: var(--ink-600);        color: var(--text-dim); }
+
+  .trk-route { margin-bottom: 12px; }
+  .trk-ends { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+  .trk-code { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; color: var(--text); }
+  .trk-city { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; max-width: 118px; line-height: 1.3; }
+  .trk-ends > div:last-child { text-align: right; }
+  .trk-ends > div:last-child .trk-city { margin-left: auto; }
+
+  .trk-track { position: relative; height: 3px; background: var(--ink-600); border-radius: 2px; margin: 12px 0 7px; }
+  .trk-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--signal); border-radius: 2px; }
+  .trk-plane {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    font-size: 13px; color: var(--signal); text-shadow: 0 0 8px rgba(77,163,255,0.7);
+  }
+  .trk-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
+
+  .trk-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    padding-top: 11px; border-top: 1px solid var(--line);
+  }
+  .trk-stat .k { font-size: 10.5px; color: var(--text-dim); }
+  .trk-stat .v {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    color: var(--text); font-variant-numeric: tabular-nums; margin-top: 1px;
+  }
+
+  .trk-craft { display: flex; gap: 10px; align-items: center; padding-top: 11px; margin-top: 11px; border-top: 1px solid var(--line); }
+  .trk-photo { width: 76px; height: 51px; object-fit: cover; border-radius: var(--r-sm); flex-shrink: 0; background: var(--ink-600); }
+  .trk-craft-info { min-width: 0; flex: 1; }
+  .trk-type { font-size: 12.5px; font-weight: 500; color: var(--text); }
+  .trk-owner { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; line-height: 1.35; }
+
+  .trk-actions { display: flex; gap: 7px; margin-top: 12px; }
+  .trk-btn {
+    flex: 1; padding: 7px; border-radius: var(--r-md); font-size: 12px;
+    border: 1px solid var(--line-hi); color: var(--text-mid); transition: all 0.15s;
+  }
+  .trk-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  .trk-btn.on { background: var(--signal-wash); border-color: var(--signal-dim); color: var(--signal); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  /* ══════════════ MOBILE ══════════════ */
+  @media (max-width: 860px) {
+    :root { --dock-w: 100%; --rail-w: 100%; }
+
+    .app { flex-direction: column; }
+    .topbar { padding: 0 10px; }
+    .brand-name { font-size: 14px; letter-spacing: 0.12em; }
+    .clock { display: none; }
+
+    .body-row { flex-direction: column; }
+
+    /* Rail becomes a horizontal scroller under the top bar */
+    .rail {
+      width: 100%; height: 46px; flex-direction: row;
+      border-right: none; border-bottom: 1px solid var(--line);
+      padding: 0 6px; gap: 1px;
+      overflow-x: auto; overflow-y: hidden;
       scrollbar-width: none;
     }
-    .panel-toggles::-webkit-scrollbar { display: none; }
-    .toggle-btn { font-size: 8px; padding: 3px 7px; flex-shrink: 0; }
-
-    .header-status {
-      position: absolute; top: 6px; right: 10px;
-      gap: 8px; font-size: 10px;
+    .rail::-webkit-scrollbar { display: none; }
+    .rail-item { width: 42px; height: 38px; flex-shrink: 0; margin: 4px 0; }
+    .rail-item.active::before {
+      left: 50%; top: auto; bottom: -4px; transform: translateX(-50%);
+      width: 20px; height: 2.5px; border-radius: 2px 2px 0 0;
     }
-    .header-time { font-size: 10px; display: none; }
-    .config-btn { font-size: 8px; padding: 3px 6px; }
+    .rail-tip { display: none; }
+    .rail-sep { width: 1px; height: 20px; margin: 0 6px; align-self: center; }
+    .rail-spacer { display: none; }
 
-    /* MAP: adjust for taller header */
-    #map { top: 72px; }
+    #map { flex: 1; min-height: 200px; }
 
-    /* ALL PANELS: full-width slide-up drawers */
-    .panel {
-      left: 0 !important; right: 0 !important; bottom: 0 !important;
-      top: auto !important; width: 100% !important;
-      max-height: 45vh !important; border-radius: 12px 12px 0 0;
-      transform: none; transition: opacity 0.25s, max-height 0.25s;
+    /* Dock becomes a bottom sheet */
+    .dock {
+      width: 100%; max-height: 46vh;
+      border-left: none; border-top: 1px solid var(--line);
     }
-    .panel.hidden { opacity: 0; pointer-events: none; max-height: 0 !important; }
+    .panel { max-height: 46vh; }
+    .panel.floating { position: static; width: 100%; border-radius: 0; box-shadow: none; border: none; border-bottom: 1px solid var(--line); }
 
-    .panel-flights,
-    .panel-stocks,
-    .panel-satellites,
-    .panel-shipping { top: auto !important; }
+    .statusbar { font-size: 11px; padding: 0 10px; }
 
-    .panel-news { width: 100% !important; max-height: 50vh !important; }
-
-    .panel-body { max-height: 35vh !important; }
-
-    /* PANEL HEADER: add drag handle hint */
-    .panel-header {
-      padding: 8px 14px; position: relative;
-    }
-    .panel-header::before {
-      content: ''; position: absolute; top: 4px; left: 50%;
-      transform: translateX(-50%); width: 32px; height: 3px;
-      background: var(--border-bright); border-radius: 2px;
-    }
-
-    /* FLIGHT LIST: compact items */
-    .flight-item { padding: 6px 0; gap: 8px; }
-    .flight-callsign { font-size: 11px; }
-    .flight-route { font-size: 9px; }
-    .flight-alt { font-size: 9px; }
-
-    /* NEWS: compact */
-    .news-headline { font-size: 11px; line-height: 1.4; }
-    .news-source { font-size: 8px; }
-    .news-time { font-size: 8px; }
-    .region-selector { padding: 6px 10px; gap: 3px; }
-    .region-btn { font-size: 8px; padding: 2px 6px; }
-    .news-tabs { }
-    .news-tab { padding: 6px 10px; font-size: 8px; }
-    .news-local-header { padding: 6px 10px; }
-    .news-local-country { font-size: 10px; }
-
-    /* STOCKS: compact */
-    .stock-symbol { font-size: 11px; min-width: 40px; }
-    .stock-name { font-size: 9px; }
-    .stock-price { font-size: 12px; }
-    .stock-change { font-size: 9px; }
-    .stock-sparkline { height: 22px; }
-
-    /* SATELLITES: compact */
-    .sat-name { font-size: 11px; }
-    .sat-detail { font-size: 9px; }
-    .sat-alt { font-size: 9px; }
-
-    /* LAYER CONTROLS: bottom bar above coords */
-    .layer-control {
-      bottom: 38px; gap: 3px;
-    }
-    .layer-btn { font-size: 8px; padding: 5px 8px; }
-
-    .traffic-toggle {
-      bottom: 38px; left: calc(50% + 80px);
-    }
-    .traffic-btn { font-size: 8px; padding: 4px 8px; }
-
-    .conflict-toggle {
-      bottom: 38px; left: calc(50% + 140px);
-    }
-    .conflict-btn { font-size: 8px; padding: 4px 8px; }
-
-    /* COORDS BAR */
-    .map-coords {
-      font-size: 8px; padding: 3px 10px; letter-spacing: 1px;
-    }
-
-    /* WEATHER PANEL: full width bottom sheet */
     .weather-panel {
-      left: 0 !important; right: 0 !important; bottom: 0 !important;
-      top: auto !important; width: 100% !important;
-      max-height: 60vh; border-radius: 12px 12px 0 0;
-      padding: 12px 14px;
+      left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+      width: 100%; border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 62vh;
     }
-    .weather-icon { font-size: 28px; }
-    .weather-temp { font-size: 22px; }
-    .weather-grid { font-size: 10px; gap: 4px 10px; }
-    .weather-forecast-hour { font-size: 9px; }
-    .weather-location-name { font-size: 12px; }
-    .weather-wiki-summary { font-size: 10px; max-height: 60px; }
-
-    /* CONFIG MODAL: full width */
-    .modal { width: 95vw; padding: 20px; max-height: 90vh; overflow-y: auto; }
-    .modal h2 { font-size: 14px; letter-spacing: 3px; }
-    .modal p { font-size: 10px; }
-    .modal input { font-size: 11px; padding: 8px 10px; }
-    .btn-primary, .btn-secondary { font-size: 10px; padding: 8px; }
-
-    /* DEBUG LOG: full width */
-    .debug-log {
-      width: 95vw; left: 2.5vw; transform: none;
-      top: 76px; max-height: 140px;
-    }
-
-    /* CONFLICT POPUPS: constrain width */
-    .conflict-popup .leaflet-popup-content-wrapper { max-width: 85vw; }
-    .conflict-popup-title { font-size: 10px; }
-    .conflict-popup-detail { font-size: 9px; }
-
-    /* SCANLINE: adjust */
-    .scanline { top: 72px; }
-
-    /* FLIGHT COUNT OVERLAY */
-    .flight-count-overlay { top: 76px; font-size: 9px; }
-
-    /* Hide satellites panel by default on mobile (too much clutter) */
-    .panel-satellites { display: none; }
-    .panel-satellites.mobile-show { display: block; }
-  }
-
-  /* VERY SMALL SCREENS (iPhone SE etc) */
-  @media (max-width: 380px) {
-    .logo { font-size: 11px; }
-    .logo-sub { display: none; }
-    .toggle-btn { font-size: 7px; padding: 2px 5px; }
-    .panel { max-height: 40vh !important; }
-    .panel-body { max-height: 30vh !important; }
-    .layer-control { bottom: 32px; }
-    .traffic-toggle { bottom: 32px; }
-    .conflict-toggle { bottom: 32px; }
+    .debug-log { right: 10px; left: 10px; width: auto; top: calc(var(--top-h) + 52px); }
+    .modal { padding: 20px; }
   }
 </style>
 </head>
 <body>
 
-<!-- CONFIG MODAL -->
+<!-- ═══ SETUP ═══ -->
 <div class="modal-overlay" id="configModal">
   <div class="modal">
-    <h2>⚙ CONFIGURE</h2>
-    <p>
-      SENTINEL uses free APIs to fetch live data. Enter your API keys below.<br>
-      Flight data uses adsb.lol (free, no key needed, no rate limits).
-    </p>
+    <h2>Set up your feeds</h2>
+    <p>Sentinel pulls from free public APIs. Flights, satellites, earthquakes and disaster alerts work with no key at all — the fields below unlock the rest.</p>
 
-    <label>Finnhub API Key (stocks + news)</label>
-    <input type="text" id="finnhubKey" placeholder="e.g. csXXXXXXXXXXXXXXXXXX" value="d6j22ohr01ql467hvq6gd6j22ohr01ql467hvq70">
-    <div class="modal-hint">Free at <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a> — 60 calls/min</div>
+    <label for="finnhubKey">Finnhub — markets and business news</label>
+    <input type="text" id="finnhubKey" placeholder="Paste your key" value="d6j22ohr01ql467hvq6gd6j22ohr01ql467hvq70">
+    <div class="modal-hint">Free at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> — 60 calls a minute</div>
 
-    <label>GNews API Key (regional news)</label>
-    <input type="text" id="gnewsKey" placeholder="e.g. a1b2c3d4e5f6g7h8i9j0" value="3197a7653ed97a31b61b7fc089c0aa87">
-    <div class="modal-hint">Free at <a href="https://gnews.io" target="_blank">gnews.io</a> — 100 calls/day</div>
+    <label for="gnewsKey">GNews — regional headlines</label>
+    <input type="text" id="gnewsKey" placeholder="Paste your key" value="3197a7653ed97a31b61b7fc089c0aa87">
+    <div class="modal-hint">Free at <a href="https://gnews.io" target="_blank" rel="noopener">gnews.io</a> — 100 calls a day</div>
 
-    <label>TomTom API Key (live traffic overlay)</label>
-    <input type="text" id="tomtomKey" placeholder="e.g. AbCdEfGhIjKlMnOpQrStUvWxYz" value="T0z1oAPLcIotBjB8QpwxsLvlSA0SioYC">
-    <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank">developer.tomtom.com</a> — 50K tiles/day</div>
-
-    <label>HERE API Key (traffic fallback)</label>
-    <input type="text" id="hereKey" placeholder="e.g. xYzAbCdEfGhIjKlMnOpQrStUvWx">
-    <div class="modal-hint">Free at <a href="https://developer.here.com" target="_blank">developer.here.com</a> — 250K/month (auto-fallback)</div>
+    <label for="tomtomKey">TomTom — live road traffic</label>
+    <input type="text" id="tomtomKey" placeholder="Paste your key" value="T0z1oAPLcIotBjB8QpwxsLvlSA0SioYC">
+    <div class="modal-hint">Free at <a href="https://developer.tomtom.com" target="_blank" rel="noopener">developer.tomtom.com</a> — 50,000 tiles a day</div>
 
     <div class="modal-actions">
-      <button class="btn-primary" onclick="saveConfig()">LAUNCH SENTINEL</button>
-      <button class="btn-secondary" onclick="skipConfig()">SKIP (SIMULATED DATA)</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Start monitoring</button>
+      <button class="btn btn-secondary" onclick="skipConfig()">Use sample data</button>
     </div>
   </div>
 </div>
 
-<!-- HEADER -->
-<div class="header">
-  <div class="header-left">
-    <div>
-      <div class="logo">SENTINEL</div>
-      <div class="logo-sub">Global Intelligence Platform</div>
+<div class="app">
+
+  <!-- ═══ TOP BAR ═══ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-name">Sentinel</span>
     </div>
-    <div class="panel-toggles">
-      <button class="toggle-btn active" data-panel="flights" onclick="togglePanel('flights',this)">✈ FLIGHTS</button>
-      <button class="toggle-btn disabled" data-panel="shipping" style="opacity:0.3; cursor:default; pointer-events:none;" title="Coming soon — awaiting free AIS API">🚢 SHIPPING</button>
-      <button class="toggle-btn active" data-panel="news" onclick="togglePanel('news',this)">📡 NEWS</button>
-      <button class="toggle-btn active" data-panel="stocks" onclick="togglePanel('stocks',this)">📈 STOCKS</button>
-      <button class="toggle-btn active" data-panel="satellites" onclick="togglePanel('satellites',this)">🛰 SATS</button>
-      <button class="toggle-btn" onclick="toggleTraffic(this)">🚗 TRAFFIC</button>
-      <button class="toggle-btn" onclick="toggleConflictZones(this)">⚠ CONFLICTS</button>
+    <div class="topbar-right">
+      <span class="feed-state" id="feedStatus"><span class="dot off"></span>Offline</span>
+      <time class="clock" id="utcTime">--:--:--</time>
+      <button class="icon-btn" id="btnLog" onclick="toggleDebug(this)" title="Activity log" aria-label="Activity log">◱</button>
+      <button class="icon-btn" onclick="showConfig()" title="Settings" aria-label="Settings">⚙</button>
     </div>
+  </header>
+
+  <div class="body-row">
+
+    <!-- ═══ RAIL ═══ -->
+    <nav class="rail" id="rail" aria-label="Layers">
+      <button class="rail-item active" data-panel="flights" onclick="togglePanel('flights',this)" aria-label="Flights">
+        <span>✈</span><span class="rail-tip">Flights</span>
+      </button>
+      <button class="rail-item active" data-panel="satellites" onclick="togglePanel('satellites',this)" aria-label="Satellites">
+        <span>🛰</span><span class="rail-tip">Satellites</span>
+      </button>
+      <button class="rail-item" data-panel="events" onclick="togglePanel('events',this)" aria-label="Live events">
+        <span>🌐</span><span class="rail-tip">Live events</span>
+      </button>
+      <button class="rail-item active" data-panel="news" onclick="togglePanel('news',this)" aria-label="News">
+        <span>📡</span><span class="rail-tip">News</span>
+      </button>
+      <button class="rail-item active" data-panel="stocks" onclick="togglePanel('stocks',this)" aria-label="Markets">
+        <span>📈</span><span class="rail-tip">Markets</span>
+      </button>
+
+      <div class="rail-sep"></div>
+
+      <button class="rail-item" data-panel="weather" onclick="togglePanel('weather',this)" aria-label="Weather layers">
+        <span>🌦</span><span class="rail-tip">Weather layers</span>
+      </button>
+
+      <div class="rail-sep"></div>
+
+      <button class="rail-item" data-overlay="conflicts" onclick="toggleConflictZones(this)" aria-label="Conflict zones">
+        <span>⚠</span><span class="rail-tip">Conflict zones</span>
+      </button>
+      <button class="rail-item" data-overlay="traffic" onclick="toggleTraffic(this)" aria-label="Road traffic flow">
+        <span>🚗</span><span class="rail-tip">Traffic flow</span>
+      </button>
+      <button class="rail-item" data-panel="incidents" onclick="togglePanel('incidents',this)" aria-label="Road incidents">
+        <span>🚧</span><span class="rail-tip">Road incidents</span>
+      </button>
+
+      <div class="rail-spacer"></div>
+
+      <button class="rail-item" data-panel="shipping" disabled aria-label="Shipping — not available yet">
+        <span>🚢</span><span class="rail-tip">Shipping — coming soon</span>
+      </button>
+    </nav>
+
+    <!-- ═══ MAP ═══ -->
+    <main id="map"></main>
+
+    <!-- ═══ DOCK ═══ -->
+    <aside class="dock" id="dock">
+
+      <section class="panel" id="panelFlights">
+        <div class="panel-header">
+          <span class="panel-title">Flights</span>
+          <span class="panel-badge badge-sim" id="flightAuthBadge">anon</span>
+          <span class="panel-badge badge-count" id="flightCount">—</span>
+        </div>
+        <div class="trk-search">
+          <input id="trkInput" class="trk-input" placeholder="Track a flight — BAW117, G-STBC, 4008F3"
+                 autocomplete="off" spellcheck="false"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();trackFlight(this.value);}">
+          <button class="trk-go" onclick="trackFlight(document.getElementById('trkInput').value)" aria-label="Track">→</button>
+        </div>
+        <div id="trkCard"></div>
+        <div class="panel-body" id="flightList">
+          <div class="loading-msg">Waiting for setup</div>
+        </div>
+      </section>
+
+      <section class="panel" id="panelSatellites">
+        <div class="panel-header">
+          <span class="panel-title">Satellites</span>
+          <span class="panel-badge badge-count" id="satCount">—</span>
+        </div>
+        <div class="panel-body" id="satList">
+          <div class="loading-msg"><span class="spinner"></span>Loading orbital data</div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panelEvents">
+        <div class="panel-header">
+          <span class="panel-title">Live events</span>
+          <span class="panel-badge badge-count" id="eventCount">—</span>
+        </div>
+        <div class="chips" id="eventFilters">
+          <button class="chip active" data-feed="quake" onclick="toggleEventFeed('quake', this)">Earthquakes</button>
+          <button class="chip active" data-feed="disaster" onclick="toggleEventFeed('disaster', this)">Disasters</button>
+          <button class="chip active" data-feed="news" onclick="toggleEventFeed('news', this)">News</button>
+        </div>
+        <div class="panel-body" id="eventList">
+          <div class="loading-msg">Turn on Live events to start scanning</div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panelWeather">
+        <div class="panel-header">
+          <span class="panel-title">Weather layers</span>
+          <span class="panel-badge badge-count" id="wxCount">off</span>
+        </div>
+        <div class="panel-body">
+          <div class="wx-toggle" onclick="toggleWxLayer('rain')">
+            <span class="wx-sw" id="swRain"></span>
+            <span class="wx-label">Rain radar<em>Live precipitation, last 2 hours</em></span>
+          </div>
+          <div class="wx-toggle" onclick="toggleWxLayer('wind')">
+            <span class="wx-sw" id="swWind"></span>
+            <span class="wx-label">Wind flow<em>Animated surface wind</em></span>
+          </div>
+          <div class="wx-toggle" onclick="toggleWxLayer('temp')">
+            <span class="wx-sw" id="swTemp"></span>
+            <span class="wx-label">Temperature<em>Surface air temperature</em></span>
+          </div>
+
+          <div class="wx-timeline hidden" id="wxTimeline">
+            <div class="wx-timeline-head">
+              <button class="wx-play" id="wxPlay" onclick="event.stopPropagation(); toggleRadarPlay()">▶</button>
+              <span class="wx-frame-time" id="wxFrameTime">—</span>
+            </div>
+            <input type="range" class="wx-scrub" id="wxScrub" min="0" max="0" value="0"
+                   oninput="event.stopPropagation(); showRadarFrame(+this.value, true)">
+            <div class="wx-scale" id="wxRainScale"></div>
+          </div>
+
+          <div class="wx-legend hidden" id="wxTempLegend">
+            <div class="wx-legend-title">Temperature</div>
+            <div class="wx-ramp" id="wxTempRamp"></div>
+            <div class="wx-ramp-labels"><span>-30</span><span>0</span><span>20</span><span>45 °C</span></div>
+          </div>
+
+          <div class="wx-legend hidden" id="wxWindLegend">
+            <div class="wx-legend-title">Wind speed</div>
+            <div class="wx-ramp" id="wxWindRamp"></div>
+            <div class="wx-ramp-labels"><span>0</span><span>20</span><span>40</span><span>60+ km/h</span></div>
+          </div>
+
+          <div class="wx-credit">Radar by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · Wind and temperature by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panelIncidents">
+        <div class="panel-header">
+          <span class="panel-title">Road incidents</span>
+          <span class="panel-badge badge-count" id="incCount">—</span>
+        </div>
+        <div class="chips" id="incFilters">
+          <button class="chip active" data-inc="accident" onclick="toggleIncFilter('accident', this)">Accidents</button>
+          <button class="chip active" data-inc="closure" onclick="toggleIncFilter('closure', this)">Closures</button>
+          <button class="chip active" data-inc="jam" onclick="toggleIncFilter('jam', this)">Jams</button>
+          <button class="chip active" data-inc="works" onclick="toggleIncFilter('works', this)">Roadworks</button>
+          <button class="chip active" data-inc="hazard" onclick="toggleIncFilter('hazard', this)">Hazards</button>
+        </div>
+        <div class="panel-body" id="incList">
+          <div class="loading-msg">Zoom into an area to load incidents</div>
+        </div>
+      </section>
+
+      <section class="panel" id="panelNews">
+        <div class="panel-header">
+          <span class="panel-title">News</span>
+          <span class="panel-badge badge-count" id="newsRegionLabel">Global</span>
+        </div>
+        <div class="tabs">
+          <button class="tab active" id="newsTabGlobal" onclick="switchNewsTab('global')">Global</button>
+          <button class="tab" id="newsTabLocal" onclick="switchNewsTab('local')">Local</button>
+        </div>
+        <div id="newsGlobalPane" style="display:flex; flex-direction:column; min-height:0;">
+          <div class="chips" id="regionSelector"></div>
+          <div class="panel-body" id="newsList">
+            <div class="loading-msg">Waiting for setup</div>
+          </div>
+        </div>
+        <div id="newsLocalPane" style="display:none; flex-direction:column; min-height:0;">
+          <div class="local-head">
+            <span class="local-country" id="localNewsCountry">🇬🇧 United Kingdom</span>
+            <span class="local-hint">Click the map to change</span>
+          </div>
+          <div class="panel-body" id="localNewsList">
+            <div class="loading-msg"><span class="spinner"></span>Loading local headlines</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panelStocks">
+        <div class="panel-header">
+          <span class="panel-title">Markets</span>
+          <span class="panel-badge badge-count" id="marketStatus">—</span>
+        </div>
+        <div class="panel-body" id="stockList">
+          <div class="loading-msg">Waiting for setup</div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panelShipping">
+        <div class="panel-header">
+          <span class="panel-title">Shipping</span>
+          <span class="panel-badge badge-sim" id="shipBadge">sample</span>
+        </div>
+        <div class="panel-body" id="shipList"></div>
+      </section>
+
+    </aside>
   </div>
-  <div class="header-status">
-    <span id="feedStatus"><span class="status-dot off"></span>OFFLINE</span>
-    <button class="config-btn" onclick="showConfig()">⚙ CONFIG</button>
-    <button class="config-btn" onclick="document.getElementById('debugLog').classList.toggle('hidden')" style="font-size:8px;">🔍 LOG</button>
-    <span id="utcTime" class="header-time">--:--:-- UTC</span>
-  </div>
+
+  <!-- ═══ STATUS BAR ═══ -->
+  <footer class="statusbar">
+    <span class="coords" id="mapCoords">0.000 N &nbsp; 0.000 E &nbsp; z3</span>
+    <div class="statusbar-right">
+      <div class="segmented" role="group" aria-label="Base map">
+        <button class="seg active" onclick="switchLayer(0, this)">Dark</button>
+        <button class="seg" onclick="switchLayer(1, this)">Street</button>
+        <button class="seg" onclick="switchLayer(2, this)">Satellite</button>
+      </div>
+    </div>
+  </footer>
 </div>
 
-<div class="scanline"></div>
-
-<!-- DEBUG LOG -->
+<!-- ═══ FLOATING ═══ -->
 <div class="debug-log hidden" id="debugLog">
   <div class="debug-log-header">
-    <span>🔍 OPENSKY DEBUG</span>
-    <button onclick="document.getElementById('debugLog').classList.add('hidden')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;">✕</button>
+    <span>Activity</span>
+    <button class="weather-close" onclick="toggleDebug()" aria-label="Close">×</button>
   </div>
   <div id="debugEntries"></div>
 </div>
 
-<div id="map"></div>
-
-<!-- WEATHER PANEL (positioned dynamically) -->
 <div class="weather-panel hidden" id="weatherPanel">
   <div class="weather-panel-header">
-    <h3>🌤 WEATHER INTEL</h3>
-    <button class="weather-close" onclick="document.getElementById('weatherPanel').classList.add('hidden')">✕</button>
+    <h3>Conditions</h3>
+    <button class="weather-close" onclick="document.getElementById('weatherPanel').classList.add('hidden')" aria-label="Close">×</button>
   </div>
   <div id="weatherContent">
-    <div class="loading-msg"><span class="spinner"></span>Fetching weather data...</div>
+    <div class="loading-msg"><span class="spinner"></span>Reading conditions</div>
   </div>
 </div>
-
-<!-- LAYER CONTROL -->
-<div class="layer-control">
-  <button class="layer-btn active" onclick="switchLayer(0, this)" title="Dark minimal tiles">DARK</button>
-  <button class="layer-btn" onclick="switchLayer(1, this)" title="Street detail with buildings & POIs">STREET</button>
-  <button class="layer-btn" onclick="switchLayer(2, this)" title="Satellite imagery">SAT</button>
-</div>
-
-<!-- PANELS -->
-<div class="panel panel-flights" id="panelFlights">
-  <div class="panel-header">
-    <span class="panel-title">✈ Flight Tracker</span>
-    <span class="panel-badge badge-count" id="flightCount">— TRACKED</span>
-    <span class="panel-badge badge-sim" id="flightAuthBadge" style="font-size:8px;">ANON</span>
-  </div>
-  <div class="panel-body" id="flightList" style="max-height: calc(50vh - 120px);">
-    <div class="loading-msg">Waiting for config...</div>
-  </div>
-</div>
-
-<div class="panel panel-shipping" id="panelShipping" style="display:none;">
-  <div class="panel-header">
-    <span class="panel-title">🚢 Maritime Traffic</span>
-    <span class="panel-badge badge-sim" id="shipBadge">SIMULATED</span>
-  </div>
-  <div class="panel-body" id="shipList" style="max-height: calc(50vh - 120px);"></div>
-</div>
-
-<div class="panel panel-news" id="panelNews">
-  <div class="panel-header">
-    <span class="panel-title">📡 Intelligence Feed</span>
-    <span class="panel-badge badge-count" id="newsRegionLabel">GLOBAL</span>
-  </div>
-  <div class="news-tabs">
-    <button class="news-tab active" id="newsTabGlobal" onclick="switchNewsTab('global')">🌐 GLOBAL</button>
-    <button class="news-tab" id="newsTabLocal" onclick="switchNewsTab('local')">📍 LOCAL</button>
-  </div>
-  <div id="newsGlobalPane">
-    <div class="region-selector" id="regionSelector"></div>
-    <div class="panel-body" id="newsList" style="max-height: calc(50vh - 210px);">
-      <div class="loading-msg">Waiting for config...</div>
-    </div>
-  </div>
-  <div id="newsLocalPane" style="display:none;">
-    <div class="news-local-header">
-      <span class="news-local-country" id="localNewsCountry">🇬🇧 UNITED KINGDOM</span>
-      <span class="news-local-hint">Click map to change</span>
-    </div>
-    <div class="panel-body" id="localNewsList" style="max-height: calc(50vh - 210px);">
-      <div class="loading-msg"><span class="spinner"></span>Fetching local news...</div>
-    </div>
-  </div>
-</div>
-
-<div class="panel panel-stocks" id="panelStocks">
-  <div class="panel-header">
-    <span class="panel-title">📈 Market Feed</span>
-    <span class="panel-badge badge-count" id="marketStatus">—</span>
-  </div>
-  <div class="panel-body" id="stockList" style="max-height: calc(50vh - 120px);">
-    <div class="loading-msg">Waiting for config...</div>
-  </div>
-</div>
-
-<div class="panel panel-satellites" id="panelSatellites">
-  <div class="panel-header">
-    <span class="panel-title">🛰 Satellite Tracker</span>
-    <span class="panel-badge badge-count" id="satCount">— TRACKED</span>
-  </div>
-  <div class="panel-body" id="satList" style="max-height: calc(50vh - 120px);">
-    <div class="loading-msg"><span class="spinner"></span>Loading satellite TLEs...</div>
-  </div>
-</div>
-
-<div class="map-coords" id="mapCoords">LAT 0.000 — LNG 0.000 — ZOOM 3</div>
 
 <script>
 // ==================== STATE ====================
@@ -837,12 +1068,13 @@ const map = L.map('map', {
 });
 
 // ==================== MAP TILE LAYERS ====================
+// All keyless — no API keys, works from file:// and any domain
 const tileLayers = [
-  // 0: DARK — CartoDB Dark Matter (current)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 20
+  // 0: DARK — OSM tiles with dark CSS filter (keyless, works everywhere)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, className: 'dark-basemap'
   }),
-  // 1: STREET — OSM with dark CSS filter (full detail: buildings, shops, POIs)
+  // 1: STREET — OSM with lighter filter (full detail: buildings, shops, POIs)
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, className: 'dark-tiles'
   }),
@@ -862,13 +1094,16 @@ function switchLayer(idx, btn) {
   // Move tile layer below markers
   activeLayer.setZIndex(0);
   // Update button states
-  document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.seg').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
 
-// Dark-tiles CSS class filter (applied to OSM street tiles)
+// Dark-tiles CSS class filters (applied to OSM tiles)
 const darkTileStyle = document.createElement('style');
 darkTileStyle.textContent = `
+  .dark-basemap {
+    filter: invert(1) hue-rotate(190deg) brightness(0.72) contrast(1.15) saturate(0.25) grayscale(0.35);
+  }
   .dark-tiles {
     filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
   }
@@ -876,8 +1111,9 @@ darkTileStyle.textContent = `
 document.head.appendChild(darkTileStyle);
 
 map.on('mousemove', (e) => {
-  document.getElementById('mapCoords').textContent =
-    `LAT ${e.latlng.lat.toFixed(3)} — LNG ${e.latlng.lng.toFixed(3)} — ZOOM ${map.getZoom()}`;
+  const la = e.latlng.lat, ln = e.latlng.lng;
+  document.getElementById('mapCoords').innerHTML =
+    `${Math.abs(la).toFixed(3)} ${la >= 0 ? 'N' : 'S'} &nbsp; ${Math.abs(ln).toFixed(3)} ${ln >= 0 ? 'E' : 'W'} &nbsp; z${map.getZoom()}`;
 });
 
 // ==================== TRAFFIC OVERLAY (TomTom Raster Flow Tiles) ====================
@@ -1158,15 +1394,11 @@ async function fetchSatelliteTLEs() {
 }
 
 async function corsFetch(url) {
-  // Try direct, then proxies
-  const attempts = [
-    url,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?${encodeURIComponent(url)}`
-  ];
+  // Direct first, then the shared proxy list
+  const attempts = [url, ...CORS_PROXIES.map(fn => fn(url))];
   for (const u of attempts) {
     try {
-      const res = await fetch(u);
+      const res = await fetchTimeout(u, u === url ? 5000 : 8000);
       if (res.ok) return await res.text();
     } catch (e) { continue; }
   }
@@ -1274,7 +1506,7 @@ function updateSatMarkers() {
     satMarkers.push(marker);
   });
 
-  document.getElementById('satCount').textContent = `${satData.length} TRACKED`;
+  document.getElementById('satCount').textContent = `${satData.length}`;
 }
 
 function drawISSOrbit(iss) {
@@ -1374,22 +1606,19 @@ map.on('click', async (e) => {
   const panel = document.getElementById('weatherPanel');
   const content = document.getElementById('weatherContent');
 
-  const isMobile = window.innerWidth <= 768;
-  if (isMobile) {
-    // Mobile: CSS handles positioning (bottom sheet)
-    panel.style.left = '';
-    panel.style.top = '';
+  if (window.innerWidth <= 860) {
+    panel.style.left = panel.style.top = '';   // CSS bottom sheet takes over
   } else {
-    // Desktop: position near click
     const px = map.latLngToContainerPoint(e.latlng);
     const mapRect = document.getElementById('map').getBoundingClientRect();
-    let left = mapRect.left + px.x + 20;
-    let top = mapRect.top + px.y - 100;
-    if (left + 360 > window.innerWidth) left = window.innerWidth - 370;
-    if (top < 60) top = 60;
-    if (top + 500 > window.innerHeight) top = window.innerHeight - 510;
+    let left = mapRect.left + px.x + 18;
+    let top  = mapRect.top + px.y - 90;
+    if (left + 356 > window.innerWidth) left = mapRect.left + px.x - 356;
+    if (left < 8) left = 8;
+    if (top < 56) top = 56;
+    if (top + 440 > window.innerHeight) top = Math.max(56, window.innerHeight - 450);
     panel.style.left = left + 'px';
-    panel.style.top = top + 'px';
+    panel.style.top  = top + 'px';
   }
 
   panel.classList.remove('hidden');
@@ -1458,12 +1687,12 @@ map.on('click', async (e) => {
         </div>
       </div>
       <div class="weather-grid">
-        <div><span class="wg-label">Feels like</span><br><span class="wg-value">${Math.round(c.apparent_temperature)}°C</span></div>
-        <div><span class="wg-label">Humidity</span><br><span class="wg-value">${c.relative_humidity_2m}%</span></div>
-        <div><span class="wg-label">Wind</span><br><span class="wg-value">${Math.round(c.wind_speed_10m)} km/h ${windDir}</span></div>
-        <div><span class="wg-label">Gusts</span><br><span class="wg-value">${Math.round(c.wind_gusts_10m)} km/h</span></div>
-        <div><span class="wg-label">Pressure</span><br><span class="wg-value">${Math.round(c.surface_pressure)} hPa</span></div>
-        <div><span class="wg-label">Precip</span><br><span class="wg-value">${c.precipitation} mm</span></div>
+        <div><div class="wg-label">Feels like</div><div class="wg-value">${Math.round(c.apparent_temperature)}°C</div></div>
+        <div><div class="wg-label">Humidity</div><div class="wg-value">${c.relative_humidity_2m}%</div></div>
+        <div><div class="wg-label">Wind</div><div class="wg-value">${Math.round(c.wind_speed_10m)} km/h ${windDir}</div></div>
+        <div><div class="wg-label">Gusts</div><div class="wg-value">${Math.round(c.wind_gusts_10m)} km/h</div></div>
+        <div><div class="wg-label">Pressure</div><div class="wg-value">${Math.round(c.surface_pressure)} hPa</div></div>
+        <div><div class="wg-label">Rain</div><div class="wg-value">${c.precipitation} mm</div></div>
       </div>
       ${forecastHtml ? `<div class="weather-forecast">${forecastHtml}</div>` : ''}
       <div class="weather-coords">${lat.toFixed(4)}°N ${lng.toFixed(4)}°E · Open-Meteo${loc ? ' + Wikipedia' : ''}</div>
@@ -1539,40 +1768,78 @@ async function fetchPageSummary(page) {
 // ==================== CLOCK ====================
 function updateClock() {
   const now = new Date();
-  document.getElementById('utcTime').textContent = now.toUTCString().slice(17, 25) + ' UTC';
+  document.getElementById('utcTime').textContent = now.toUTCString().slice(17, 25);
 }
 setInterval(updateClock, 1000);
 updateClock();
 
 // ==================== PANEL TOGGLE ====================
-const panelIds = { flights: 'panelFlights', shipping: 'panelShipping', news: 'panelNews', stocks: 'panelStocks', satellites: 'panelSatellites' };
+const panelIds = { flights: 'panelFlights', shipping: 'panelShipping', news: 'panelNews', stocks: 'panelStocks', satellites: 'panelSatellites', events: 'panelEvents', weather: 'panelWeather', incidents: 'panelIncidents' };
 
 function togglePanel(name, btn) {
   const panel = document.getElementById(panelIds[name]);
-  const isMobile = window.innerWidth <= 768;
+  const isMobile = window.innerWidth <= 860;
+
+  // These panels drive their own feeds
+  if (name === 'events') {
+    const turningOn = panel.classList.contains('hidden');
+    if (turningOn !== eventsActive) toggleLiveEvents(null);
+  }
+  if (name === 'incidents') {
+    toggleIncidents(panel.classList.contains('hidden'));
+  }
 
   if (isMobile) {
-    // On mobile: only one panel at a time
-    const isCurrentlyVisible = !panel.classList.contains('hidden');
-
-    // Hide all panels first
+    // One panel at a time on small screens
+    const wasVisible = !panel.classList.contains('hidden');
     Object.entries(panelIds).forEach(([key, id]) => {
-      const p = document.getElementById(id);
-      p.classList.add('hidden');
-      p.classList.remove('mobile-show');
-      const b = document.querySelector(`[data-panel="${key}"]`);
+      document.getElementById(id).classList.add('hidden');
+      const b = document.querySelector(`.rail-item[data-panel="${key}"]`);
       if (b) b.classList.remove('active');
     });
-
-    if (!isCurrentlyVisible) {
+    if (!wasVisible) {
       panel.classList.remove('hidden');
-      if (name === 'satellites') panel.classList.add('mobile-show');
       btn.classList.add('active');
     }
   } else {
-    panel.classList.toggle('hidden');
-    btn.classList.toggle('active');
+    const nowHidden = panel.classList.toggle('hidden');
+    btn.classList.toggle('active', !nowHidden);
+    // A panel torn off the dock returns to it when re-opened
+    if (!nowHidden && panel.classList.contains('floating')) resetPanel(panel);
   }
+  updateDockState();
+}
+
+// Hide the dock entirely when nothing is docked, so the map gets the space
+function updateDockState() {
+  const dock = document.getElementById('dock');
+  const docked = [...dock.querySelectorAll('.panel')]
+    .filter(p => !p.classList.contains('hidden') && !p.classList.contains('floating'));
+  dock.classList.toggle('empty', docked.length === 0);
+  setTimeout(() => map.invalidateSize(), 210);
+}
+
+// Return a floating panel to the dock
+function resetPanel(panel) {
+  panel.classList.remove('floating');
+  panel.style.left = panel.style.top = panel.style.width = panel.style.zIndex = '';
+  document.getElementById('dock').appendChild(panel);
+  updateDockState();
+}
+
+// Briefly mark a rail icon when its feed refreshes
+function pulseRail(name) {
+  const btn = document.querySelector(`.rail-item[data-panel="${name}"]`);
+  if (!btn) return;
+  btn.classList.remove('pulse');
+  void btn.offsetWidth;
+  btn.classList.add('pulse');
+}
+
+function toggleDebug(btn) {
+  const log = document.getElementById('debugLog');
+  const hidden = log.classList.toggle('hidden');
+  document.getElementById('btnLog').classList.toggle('on', !hidden);
 }
 
 // ==================== CONFIG ====================
@@ -1596,11 +1863,11 @@ function skipConfig() {
 function updateStatus(mode) {
   const el = document.getElementById('feedStatus');
   if (mode === 'live') {
-    el.innerHTML = '<span class="status-dot live"></span>LIVE FEED';
+    el.innerHTML = '<span class="dot live"></span>Live';
   } else if (mode === 'partial') {
-    el.innerHTML = '<span class="status-dot sim"></span>PARTIAL LIVE';
+    el.innerHTML = '<span class="dot sim"></span>Partial';
   } else if (mode === 'simulated') {
-    el.innerHTML = '<span class="status-dot sim"></span>SIMULATED';
+    el.innerHTML = '<span class="dot sim"></span>Sample data';
   }
 }
 
@@ -1608,10 +1875,8 @@ function updateStatus(mode) {
 async function startLiveFeeds() {
   updateStatus('live');
   debugLog('SENTINEL starting live feeds...', 'ok');
-  debugLog('Flight source: adsb.lol (free, no auth, no rate limits)', 'ok');
 
-  fetchFlights();
-  setInterval(fetchFlights, 10000); // 10s refresh
+  probeFlightSources().then(ok => { if (ok) { fetchFlights(); scheduleFlightPolling(); } });
 
   if (CONFIG.finnhubKey) {
     fetchStocks();
@@ -1646,9 +1911,8 @@ async function startLiveFeeds() {
 
 function startSimulatedFeeds() {
   updateStatus('simulated');
-  // adsb.lol works without any config — always try live flights
-  fetchFlights();
-  setInterval(fetchFlights, 10000);
+  // Flight data needs no key, so it runs in sample mode too
+  probeFlightSources().then(ok => { if (ok) { fetchFlights(); scheduleFlightPolling(); } });
   initSimulatedStocks();
   setInterval(tickSimulatedStocks, 3000);
   initSimulatedNews();
@@ -1675,76 +1939,116 @@ function debugLog(msg, level = 'ok') {
   console.log(`[SENTINEL ${level.toUpperCase()}] ${msg}`);
 }
 
-// ==================== FLIGHTS (adsb.lol — FREE, no auth, no rate limits) ====================
-let flightRefreshCountdown = 10;
+// ==================== FLIGHTS ====================
+const MAX_QUERY_POINTS = 4;      // each point is one rate-limited request
+let flightRefreshCountdown = 6;
+let flightPollTimer = null;
+
+// Poll cadence follows the active source's tolerance
+function flightPollSec() { return FLIGHT_SOURCES[activeFlightSource].pollSec; }
+
+function scheduleFlightPolling() {
+  if (flightPollTimer) clearInterval(flightPollTimer);
+  flightPollTimer = setInterval(fetchFlights, flightPollSec() * 1000);
+}
 let flightCountdownInterval = null;
 let flightFetchInProgress = false;
 
 // We route through a CORS proxy since these APIs don't set Access-Control-Allow-Origin
 // for local file:// or sandboxed origins
+// corsproxy.io changed to ?url= at some point; the old bare form silently 404s.
+// corsproxy.io started returning 401 (it now needs an account), so it's gone.
+// corsproxy.io now returns 401 (needs an account), so it's not in the list.
 const CORS_PROXIES = [
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
 ];
 
+// Without this, a dead host hangs until the browser's own timeout, which is far
+// longer than our poll interval — one sweep then outlasts the next.
+async function fetchTimeout(url, ms = 6000, opts = {}) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// All three speak the ADSBExchange v2 response shape, so parsing is identical.
+// adsb.lol leads because its limits are load-based rather than a fixed ceiling,
+// which lets us poll noticeably faster. adsb.one caps hard at 1 request/second.
 const FLIGHT_SOURCES = [
-  { name: 'airplanes.live', buildUrl: (lat, lon, dist) => `https://api.airplanes.live/v2/point/${lat}/${lon}/${dist}` },
-  { name: 'adsb.lol', buildUrl: (lat, lon, dist) => `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}` },
-  { name: 'adsb.fi', buildUrl: (lat, lon, dist) => `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lon}/dist/${dist}` },
+  { name: 'adsb.lol', rateMs: 260, pollSec: 6,
+    buildUrl: (lat, lon, d) => `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${d}`,
+    lookup: (kind, v) => `https://api.adsb.lol/v2/${kind}/${v}` },
+  { name: 'adsb.fi',  rateMs: 400, pollSec: 8,
+    buildUrl: (lat, lon, d) => `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lon}/dist/${d}`,
+    lookup: (kind, v) => `https://opendata.adsb.fi/api/v2/${kind}/${v}` },
+  { name: 'adsb.one', rateMs: 1100, pollSec: 15,
+    buildUrl: (lat, lon, d) => `https://api.adsb.one/v2/point/${lat}/${lon}/${d}`,
+    lookup: (kind, v) => `https://api.adsb.one/v2/${kind}/${v}` },
 ];
 let activeFlightSource = 0;
+let sourceFailStreak = 0;     // rotate only after repeated failure, not one blip
+let lastRequestAt = 0;
 
 function startFlightCountdown() {
   if (flightCountdownInterval) clearInterval(flightCountdownInterval);
-  flightRefreshCountdown = 10;
+  flightRefreshCountdown = flightPollSec();
   flightCountdownInterval = setInterval(() => {
-    flightRefreshCountdown--;
-    if (flightRefreshCountdown < 0) flightRefreshCountdown = 0;
+    flightRefreshCountdown = Math.max(0, flightRefreshCountdown - 1);
     const badge = document.getElementById('flightCount');
     if (badge && liveFlightData.length > 0) {
-      badge.textContent = `${liveFlightData.length} TRACKED · ${flightRefreshCountdown}s`;
+      badge.textContent = `${liveFlightData.length} · ${flightRefreshCountdown}s`;
     }
   }, 1000);
 }
 
-// Fetch a single point through the proxy cascade, return raw aircraft array
+// These feeds are rate limited (ADSB One: 1 req/sec), so requests are spaced
+// rather than fired in parallel.
+function throttle(ms) {
+  const wait = Math.max(0, lastRequestAt + ms - Date.now());
+  lastRequestAt = Date.now() + wait;
+  return wait ? new Promise(r => setTimeout(r, wait)) : Promise.resolve();
+}
+
 async function fetchPoint(lat, lon, dist, source) {
   const rawUrl = source.buildUrl(lat.toFixed(2), lon.toFixed(2), dist);
   const attempts = [
     { label: 'direct', url: rawUrl },
     ...CORS_PROXIES.map((fn, i) => ({ label: `proxy-${i}`, url: fn(rawUrl) }))
   ];
+
+  const why = [];
   for (const attempt of attempts) {
     try {
-      const res = await fetch(attempt.url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Direct gets a short leash; proxies are slower so they get longer
+      const res = await fetchTimeout(attempt.url, attempt.label === 'direct' ? 5000 : 9000);
+      if (res.status === 429) return { ok: false, ac: [], rateLimited: true, why };
+      if (!res.ok) { why.push(`${attempt.label} HTTP ${res.status}`); continue; }
       const data = await res.json();
       return { ok: true, ac: data.ac || data.aircraft || [], via: attempt.label };
     } catch (e) {
-      continue;
+      why.push(`${attempt.label} ${e.name === 'AbortError' ? 'timed out' : (e.message || 'blocked')}`);
     }
   }
-  return { ok: false, ac: [], via: 'none' };
+  return { ok: false, ac: [], why };
 }
 
-// Build a grid of query points to cover the visible map bounds
+// Tile the visible bounds into query points. Kept deliberately small because
+// each point costs a rate-limited request.
 function buildQueryGrid(bounds) {
   const s = bounds.getSouth(), n = bounds.getNorth();
-  const w = bounds.getWest(), e = bounds.getEast();
-  const latSpan = n - s;
-  const lonSpan = e - w;
+  const w = bounds.getWest(),  e = bounds.getEast();
+  const latSpan = n - s, lonSpan = e - w;
+  const cLat = (n + s) / 2, cLon = (e + w) / 2;
 
-  // Each 250 NM query covers ~4.1° of latitude radius
-  // Use ~7° step (slight overlap) between grid points
+  // One 250nm query covers roughly 8 degrees of latitude
+  if (latSpan < 8 && lonSpan < 12) return [{ lat: cLat, lon: cLon }];
+
   const step = 7;
-
-  // At high zoom, a single center query at 250NM is more than enough
-  if (latSpan < 8 && lonSpan < 12) {
-    const cLat = (n + s) / 2;
-    const cLon = (e + w) / 2;
-    return [{ lat: cLat, lon: cLon }];
-  }
-
   const points = [];
   for (let lat = s + step / 2; lat < n + step / 2; lat += step) {
     for (let lon = w + step / 2; lon < e + step / 2; lon += step) {
@@ -1752,18 +2056,75 @@ function buildQueryGrid(bounds) {
     }
   }
 
-  // Cap at 9 queries to stay reasonable on proxy load
-  if (points.length > 9) {
-    // Evenly sample down to 9
+  // Hard ceiling of 4. At 1 req/sec a bigger grid takes longer than the
+  // refresh interval, so the map would never settle.
+  if (points.length > MAX_QUERY_POINTS) {
     const sampled = [];
-    const ratio = points.length / 9;
-    for (let i = 0; i < 9; i++) {
-      sampled.push(points[Math.floor(i * ratio)]);
-    }
+    const ratio = points.length / MAX_QUERY_POINTS;
+    for (let i = 0; i < MAX_QUERY_POINTS; i++) sampled.push(points[Math.floor(i * ratio)]);
     return sampled;
   }
+  return points.length ? points : [{ lat: cLat, lon: cLon }];
+}
 
-  return points.length > 0 ? points : [{ lat: (n + s) / 2, lon: (e + w) / 2 }];
+// Test every source once at startup and start on whichever answers. Without
+// this, a dead first source costs two full failed sweeps before rotating.
+async function probeFlightSources() {
+  debugLog('Testing flight data sources', 'ok');
+  const results = [];
+
+  await Promise.all(FLIGHT_SOURCES.map(async (s, i) => {
+    const url = s.buildUrl('51.50', '-0.12', 100);
+    const started = performance.now();
+
+    // Direct first
+    try {
+      const r = await fetchTimeout(url, 5000);
+      if (r.ok) {
+        const d = await r.json();
+        const n = (d.ac || d.aircraft || []).length;
+        results[i] = { i, ok: true, via: 'direct', ms: Math.round(performance.now() - started), n };
+        return;
+      }
+      results[i] = { i, ok: false, note: `HTTP ${r.status}` };
+    } catch (e) {
+      results[i] = { i, ok: false, note: e.name === 'AbortError' ? 'timeout' : 'blocked (CORS?)' };
+    }
+
+    // Then via proxy
+    for (let p = 0; p < CORS_PROXIES.length; p++) {
+      try {
+        const r = await fetchTimeout(CORS_PROXIES[p](url), 8000);
+        if (!r.ok) continue;
+        const d = await r.json();
+        const n = (d.ac || d.aircraft || []).length;
+        results[i] = { i, ok: true, via: `proxy-${p}`, ms: Math.round(performance.now() - started), n };
+        return;
+      } catch { /* try the next proxy */ }
+    }
+  }));
+
+  results.forEach(r => {
+    if (!r) return;
+    if (r.ok) debugLog(`  ${FLIGHT_SOURCES[r.i].name}: ${r.via}, ${r.ms}ms, ${r.n} aircraft`, 'ok');
+    else debugLog(`  ${FLIGHT_SOURCES[r.i].name}: ${r.note}`, 'warn');
+  });
+
+  // Prefer a source that works directly; fall back to the fastest proxied one
+  const working = results.filter(r => r?.ok);
+  const direct = working.filter(r => r.via === 'direct').sort((a, b) => a.ms - b.ms);
+  const best = direct[0] || working.sort((a, b) => a.ms - b.ms)[0];
+
+  if (best) {
+    activeFlightSource = best.i;
+    const s = FLIGHT_SOURCES[best.i];
+    debugLog(`Using ${s.name} via ${best.via}, polling every ${s.pollSec}s`, 'ok');
+  } else {
+    debugLog('No flight source reachable', 'err');
+    document.getElementById('flightList').innerHTML =
+      '<div class="error-msg">No flight source reachable. Every host was blocked or timed out.</div>';
+  }
+  return !!best;
 }
 
 async function fetchFlights() {
@@ -1775,51 +2136,67 @@ async function fetchFlights() {
   const queryPoints = buildQueryGrid(bounds);
 
   if (liveFlightData.length === 0) {
-    document.getElementById('flightList').innerHTML = `<div class="loading-msg"><span class="spinner"></span>Fetching ADS-B via ${source.name} (${queryPoints.length} zone${queryPoints.length > 1 ? 's' : ''})...</div>`;
+    document.getElementById('flightList').innerHTML =
+      `<div class="loading-msg"><span class="spinner"></span>Reading ${source.name}</div>`;
   }
 
-  debugLog(`Fetching ${source.name}: ${queryPoints.length} query point(s) at 250nm each`);
-
   try {
-    // Fire all grid points in parallel
-    const results = await Promise.allSettled(
-      queryPoints.map(p => fetchPoint(p.lat, p.lon, 250, source))
-    );
-
-    // Merge and deduplicate by hex
     const merged = new Map();
-    let totalRaw = 0;
-    let successCount = 0;
+    let ok = 0, rateLimited = false, lastWhy = [];
 
-    results.forEach(r => {
-      if (r.status === 'fulfilled' && r.value.ok) {
-        successCount++;
-        r.value.ac.forEach(a => {
-          if (a.lat && a.lon && a.alt_baro !== 'ground' && a.hex) {
-            merged.set(a.hex, a);
-          }
-        });
-        totalRaw += r.value.ac.length;
+    // Sequential, spaced requests — parallel bursts trip the rate limiter
+    for (const p of queryPoints) {
+      await throttle(source.rateMs);
+      const r = await fetchPoint(p.lat, p.lon, 250, source);
+
+      if (r.rateLimited) { rateLimited = true; break; }
+      if (!r.ok) {
+        lastWhy = r.why || [];
+        // If the first point can't reach the source, the rest won't either.
+        // Bail now rather than spending the whole poll interval failing.
+        if (ok === 0) break;
+        continue;
       }
-    });
 
-    if (merged.size === 0 && successCount > 0) {
-      document.getElementById('flightList').innerHTML = '<div class="loading-msg">No flights in view. Pan/zoom the map.</div>';
-      document.getElementById('flightCount').textContent = '0 TRACKED';
-      debugLog(`${source.name}: 0 aircraft across ${queryPoints.length} zones`, 'warn');
+      ok++;
+      r.ac.forEach(a => {
+        if (a.lat && a.lon && a.hex && a.alt_baro !== 'ground') merged.set(a.hex, a);
+      });
+    }
+
+    if (rateLimited) {
+      sourceFailStreak++;
+      debugLog(`${source.name} rate limited — backing off`, 'warn');
+      if (sourceFailStreak >= 2) rotateSource('rate limits');
       flightFetchInProgress = false;
       startFlightCountdown();
       return;
     }
 
-    if (successCount === 0) {
-      // All queries failed — rotate source
-      activeFlightSource = (activeFlightSource + 1) % FLIGHT_SOURCES.length;
-      debugLog(`All ${queryPoints.length} queries failed. Rotating to ${FLIGHT_SOURCES[activeFlightSource].name}`, 'err');
-      if (liveFlightData.length === 0) {
-        document.getElementById('flightList').innerHTML = `<div class="error-msg">Failed. Trying ${FLIGHT_SOURCES[activeFlightSource].name} next...</div>`;
+    if (ok === 0) {
+      sourceFailStreak++;
+      const reason = lastWhy.length ? lastWhy.join(', ') : 'no detail';
+      debugLog(`${source.name} failed — ${reason} (${sourceFailStreak}/2)`, 'warn');
+      if (sourceFailStreak >= 2) {
+        rotateSource('no response');
+        if (liveFlightData.length === 0) {
+          document.getElementById('flightList').innerHTML =
+            `<div class="error-msg">No response from ${source.name}. Trying ${FLIGHT_SOURCES[activeFlightSource].name}.</div>`;
+        }
       }
       flightFetchInProgress = false;
+      startFlightCountdown();
+      return;
+    }
+
+    sourceFailStreak = 0;
+
+    if (merged.size === 0) {
+      document.getElementById('flightList').innerHTML =
+        '<div class="loading-msg">No aircraft in view. Pan or zoom out.</div>';
+      document.getElementById('flightCount').textContent = '0';
+      flightFetchInProgress = false;
+      startFlightCountdown();
       return;
     }
 
@@ -1829,11 +2206,9 @@ async function fetchFlights() {
       registration: (a.r || '').trim(),
       type: (a.t || '').trim(),
       typeDesc: (a.desc || '').trim(),
-      country: a.dbFlags ? '🏳️' : '',
       lat: a.lat,
       lng: a.lon,
       alt: a.alt_baro || a.alt_geom || 0,
-      altMetric: false,
       velocity: a.gs || 0,
       heading: a.track || a.true_heading || 0,
       vertRate: a.baro_rate || 0,
@@ -1842,16 +2217,26 @@ async function fetchFlights() {
       source: a.type || 'adsb'
     }));
 
-    debugLog(`✓ ${liveFlightData.length} unique aircraft (${totalRaw} raw from ${successCount}/${queryPoints.length} zones) [${source.name}]`, 'ok');
+    debugLog(`${liveFlightData.length} aircraft from ${source.name} (${ok}/${queryPoints.length} zones)`, 'ok');
 
     updateFlightMarkers();
     renderFlightList();
     startFlightCountdown();
+    pulseRail('flights');
   } catch (err) {
-    debugLog(`Fetch error: ${err.message}`, 'err');
+    debugLog(`Flight fetch error: ${err.message}`, 'err');
   }
 
   flightFetchInProgress = false;
+}
+
+function rotateSource(reason) {
+  activeFlightSource = (activeFlightSource + 1) % FLIGHT_SOURCES.length;
+  sourceFailStreak = 0;
+  lastRequestAt = 0;
+  scheduleFlightPolling();
+  const s = FLIGHT_SOURCES[activeFlightSource];
+  debugLog(`Switching to ${s.name}, polling every ${s.pollSec}s (${reason})`, 'warn');
 }
 
 function createPlaneIcon(heading) {
@@ -1893,7 +2278,7 @@ function renderFlightList() {
     const label = f.callsign || f.registration || f.icao24.toUpperCase();
     const detail = [f.icao24, f.type, f.squawk ? 'SQK ' + f.squawk : ''].filter(Boolean).join(' · ');
     return `
-      <div class="flight-item" onclick="map.flyTo([${f.lat},${f.lng}], 8, {duration: 1})">
+      <div class="flight-item" onclick="trackFromList('${f.icao24}')">
         <div class="flight-icon">✈</div>
         <div class="flight-info">
           <div class="flight-callsign">${label} <span style="color: var(--text-dim); font-weight: 400; font-size: 10px">${f.type || ''}</span></div>
@@ -1906,7 +2291,7 @@ function renderFlightList() {
       </div>`;
   }).join('');
   document.getElementById('flightList').innerHTML = html;
-  document.getElementById('flightCount').textContent = `${liveFlightData.length} TRACKED`;
+  document.getElementById('flightCount').textContent = `${liveFlightData.length}`;
 }
 
 // ==================== STOCKS (Finnhub) ====================
@@ -1942,7 +2327,7 @@ async function fetchStocks() {
     });
 
     renderStockList();
-    document.getElementById('marketStatus').textContent = 'LIVE';
+    document.getElementById('marketStatus').textContent = 'live';
     document.getElementById('marketStatus').className = 'panel-badge badge-live';
   } catch (err) {
     console.error('Stock fetch error:', err);
@@ -1986,18 +2371,18 @@ function renderStockList() {
 
 // ==================== NEWS (Finnhub + GNews) ====================
 const regions = [
-  { id: 'global', label: 'GLOBAL', bounds: null },
-  { id: 'namerica', label: 'N. AMERICA', bounds: [[15,-140],[72,-50]], gnewsCountry: 'us' },
-  { id: 'europe', label: 'EUROPE', bounds: [[35,-10],[72,40]], gnewsCountry: 'gb' },
-  { id: 'meast', label: 'MID EAST', bounds: [[12,25],[42,65]], gnewsCountry: 'ae' },
-  { id: 'asia', label: 'ASIA PACIFIC', bounds: [[-10,60],[55,150]], gnewsCountry: 'jp' },
-  { id: 'africa', label: 'AFRICA', bounds: [[-35,-20],[37,55]], gnewsCountry: 'za' },
+  { id: 'global', label: 'Global', bounds: null },
+  { id: 'namerica', label: 'N. America', bounds: [[15,-140],[72,-50]], gnewsCountry: 'us' },
+  { id: 'europe', label: 'Europe', bounds: [[35,-10],[72,40]], gnewsCountry: 'gb' },
+  { id: 'meast', label: 'Middle East', bounds: [[12,25],[42,65]], gnewsCountry: 'ae' },
+  { id: 'asia', label: 'Asia Pacific', bounds: [[-10,60],[55,150]], gnewsCountry: 'jp' },
+  { id: 'africa', label: 'Africa', bounds: [[-35,-20],[37,55]], gnewsCountry: 'za' },
 ];
 let currentRegion = 'global';
 
 function renderRegionSelector() {
   const html = regions.map(r => `
-    <button class="region-btn ${r.id === currentRegion ? 'active' : ''}" onclick="selectRegion('${r.id}')">${r.label}</button>
+    <button class="chip ${r.id === currentRegion ? 'active' : ''}" onclick="selectRegion('${r.id}')">${r.label}</button>
   `).join('');
   document.getElementById('regionSelector').innerHTML = html;
 }
@@ -2058,6 +2443,7 @@ async function fetchGNews(country = 'us') {
       }));
       newsData = [...gnewsItems, ...newsData.filter(n => n.origin !== 'gnews' || n.region !== regionId)].slice(0, 50);
       renderNewsList();
+      pulseRail('news');
     }
   } catch (err) {
     console.error('GNews error:', err);
@@ -2125,9 +2511,9 @@ function switchNewsTab(tab) {
   activeNewsTab = tab;
   document.getElementById('newsTabGlobal').classList.toggle('active', tab === 'global');
   document.getElementById('newsTabLocal').classList.toggle('active', tab === 'local');
-  document.getElementById('newsGlobalPane').style.display = tab === 'global' ? '' : 'none';
-  document.getElementById('newsLocalPane').style.display = tab === 'local' ? '' : 'none';
-  document.getElementById('newsRegionLabel').textContent = tab === 'global' ? 'GLOBAL' : localNewsCountry.name.toUpperCase();
+  document.getElementById('newsGlobalPane').style.display = tab === 'global' ? 'flex' : 'none';
+  document.getElementById('newsLocalPane').style.display = tab === 'local' ? 'flex' : 'none';
+  document.getElementById('newsRegionLabel').textContent = tab === 'global' ? 'Global' : localNewsCountry.name;
 
   if (tab === 'local' && localNewsData.length === 0) {
     fetchLocalNews(localNewsCountry.code);
@@ -2139,11 +2525,11 @@ async function fetchLocalNews(countryCode) {
   const country = COUNTRY_MAP[cc] || { name: cc.toUpperCase(), flag: '🏳️' };
   localNewsCountry = { code: cc, ...country };
 
-  document.getElementById('localNewsCountry').textContent = `${country.flag} ${country.name.toUpperCase()}`;
+  document.getElementById('localNewsCountry').textContent = `${country.flag} ${country.name}`;
   document.getElementById('localNewsList').innerHTML = '<div class="loading-msg"><span class="spinner"></span>Fetching news for ' + country.name + '...</div>';
 
   if (activeNewsTab === 'local') {
-    document.getElementById('newsRegionLabel').textContent = country.name.toUpperCase();
+    document.getElementById('newsRegionLabel').textContent = country.name;
   }
 
   let articles = [];
@@ -2246,7 +2632,7 @@ function renderLocalNewsList() {
       <div class="news-meta">
         <span class="news-source">${n.source}</span>
         <span class="news-time">${n.time}</span>
-        <span class="news-region-tag">${localNewsCountry.flag} ${localNewsCountry.name.toUpperCase()}</span>
+        <span class="news-region-tag">${localNewsCountry.flag} ${localNewsCountry.name}</span>
       </div>
       <div class="news-headline">
         <span class="news-severity severity-${n.severity}"></span>
@@ -2377,7 +2763,7 @@ function initSimulatedStocks() {
     stockHistories[s.symbol] = [];
     for (let i = 0; i < 20; i++) stockHistories[s.symbol].push(s.price + (Math.random()-0.5) * s.price * 0.02);
   });
-  document.getElementById('marketStatus').textContent = 'SIMULATED';
+  document.getElementById('marketStatus').textContent = 'sample';
   document.getElementById('marketStatus').className = 'panel-badge badge-sim';
   renderStockList();
 }
@@ -2437,6 +2823,1259 @@ function drawSparkline(canvas, data, isUp) {
   ctx.fill();
 }
 
+// ==================== LIVE WORLD EVENTS ====================
+// Three keyless feeds: USGS earthquakes, GDACS disasters, GDELT geolocated news
+let eventLayerGroup = null;
+let eventsActive = false;
+let eventData = [];
+let eventFeedsEnabled = { quake: true, disaster: true, news: true };
+let eventRefreshTimer = null;
+
+const GDACS_TYPES = {
+  EQ: { label: 'Earthquake', icon: '🔴' },
+  TC: { label: 'Tropical Cyclone', icon: '🌀' },
+  FL: { label: 'Flood', icon: '🌊' },
+  VO: { label: 'Volcano', icon: '🌋' },
+  WF: { label: 'Wildfire', icon: '🔥' },
+  DR: { label: 'Drought', icon: '🏜' },
+};
+
+const ALERT_COLORS = {
+  Red:    { hex: '#ff3b30', cls: 'ev-red' },
+  Orange: { hex: '#ff9500', cls: 'ev-orange' },
+  Green:  { hex: '#34c759', cls: 'ev-green' },
+};
+
+function toggleLiveEvents(btn) {
+  eventsActive = !eventsActive;
+  if (btn) btn.classList.toggle('active', eventsActive);
+
+  const panel = document.getElementById('panelEvents');
+
+  if (eventsActive) {
+    panel.classList.remove('hidden');
+    fetchAllEvents();
+    eventRefreshTimer = setInterval(fetchAllEvents, 300000); // 5 min
+    debugLog('🌐 Live events tracking enabled', 'ok');
+  } else {
+    if (eventLayerGroup) { map.removeLayer(eventLayerGroup); eventLayerGroup = null; }
+    if (eventRefreshTimer) { clearInterval(eventRefreshTimer); eventRefreshTimer = null; }
+    debugLog('Live events tracking disabled', 'ok');
+  }
+}
+
+function toggleEventFeed(feed, btn) {
+  eventFeedsEnabled[feed] = !eventFeedsEnabled[feed];
+  btn.classList.toggle('active', eventFeedsEnabled[feed]);
+  event?.stopPropagation?.();
+  renderEventMarkers();
+  renderEventList();
+}
+
+async function fetchAllEvents() {
+  document.getElementById('eventList').innerHTML =
+    '<div class="loading-msg"><span class="spinner"></span>Scanning global feeds...</div>';
+
+  const results = await Promise.allSettled([
+    fetchEarthquakes(),
+    fetchDisasters(),
+    fetchNewsEvents(),
+  ]);
+
+  const collected = [];
+  results.forEach(r => {
+    if (r.status === 'fulfilled' && Array.isArray(r.value)) collected.push(...r.value);
+  });
+
+  // Sort newest first
+  collected.sort((a, b) => (b.time || 0) - (a.time || 0));
+  eventData = collected;
+
+  renderEventMarkers();
+  renderEventList();
+  pulseRail('events');
+
+  const counts = { quake: 0, disaster: 0, news: 0 };
+  eventData.forEach(e => counts[e.feed]++);
+  debugLog(`🌐 Events: ${counts.quake} quakes, ${counts.disaster} disasters, ${counts.news} news clusters`, 'ok');
+}
+
+// ── USGS Earthquakes (M2.5+, past 24h) — free, no key, CORS enabled ────────
+async function fetchEarthquakes() {
+  try {
+    const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    return (data.features || []).map(f => {
+      const [lng, lat, depth] = f.geometry.coordinates;
+      const p = f.properties;
+      const mag = p.mag || 0;
+      const sev = mag >= 6 ? 'Red' : mag >= 4.5 ? 'Orange' : 'Green';
+      return {
+        feed: 'quake',
+        icon: '🔴',
+        title: p.place || 'Unknown location',
+        subtitle: `M${mag.toFixed(1)} · ${Math.round(depth)}km deep`,
+        detail: `Magnitude ${mag.toFixed(1)} earthquake at a depth of ${Math.round(depth)} km. ${p.tsunami ? '⚠ Tsunami warning issued.' : ''}`,
+        lat, lng,
+        time: p.time,
+        mag,
+        alert: sev,
+        url: p.url,
+        radius: Math.max(mag * 3, 6),
+      };
+    });
+  } catch (e) {
+    debugLog(`USGS earthquake fetch failed: ${e.message}`, 'warn');
+    return [];
+  }
+}
+
+// ── GDACS Disasters (cyclones, floods, volcanoes, fires) — free, no key ────
+async function fetchDisasters() {
+  try {
+    const url = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/EVENTS4APP';
+    let text = await corsFetch(url);
+    if (!text) throw new Error('All sources failed');
+    const data = JSON.parse(text);
+
+    return (data.features || []).map(f => {
+      const p = f.properties || {};
+      const coords = f.geometry?.coordinates || [0, 0];
+      const [lng, lat] = coords;
+      const type = GDACS_TYPES[p.eventtype] || { label: p.eventtype || 'Event', icon: '⚠' };
+      const alert = (p.alertlevel || 'Green');
+      const alertKey = alert.charAt(0).toUpperCase() + alert.slice(1).toLowerCase();
+
+      // Strip HTML from description
+      let detail = (p.htmldescription || p.description || '').replace(/<[^>]*>/g, '').trim();
+      if (detail.length > 240) detail = detail.substring(0, 240) + '...';
+
+      return {
+        feed: 'disaster',
+        icon: type.icon,
+        title: p.eventname || p.name || `${type.label} — ${p.country || 'Unknown'}`,
+        subtitle: `${type.label} · ${p.country || 'Unknown'} · ${alertKey.toUpperCase()} ALERT`,
+        detail: detail || `${type.label} event currently active.`,
+        lat, lng,
+        time: p.fromdate ? new Date(p.fromdate).getTime() : Date.now(),
+        alert: alertKey,
+        url: p.url?.report || p.link || null,
+        radius: alertKey === 'Red' ? 14 : alertKey === 'Orange' ? 10 : 7,
+      };
+    }).filter(e => e.lat && e.lng && Math.abs(e.lat) <= 90);
+  } catch (e) {
+    debugLog(`GDACS disaster fetch failed: ${e.message}`, 'warn');
+    return [];
+  }
+}
+
+// ── GDELT GEO 2.0 — geolocated news events, last 24h — free, no key ────────
+async function fetchNewsEvents() {
+  try {
+    const query = encodeURIComponent('(protest OR attack OR explosion OR strike OR clash OR evacuation OR emergency)');
+    const url = `https://api.gdeltproject.org/api/v2/geo/geo?query=${query}&format=GeoJSON&mode=PointData&timespan=24h&maxpoints=60`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    return (data.features || []).slice(0, 60).map(f => {
+      const coords = f.geometry?.coordinates || [0, 0];
+      const [lng, lat] = coords;
+      const p = f.properties || {};
+
+      // GDELT packs article links into an html blob — extract the first headline
+      let headline = '';
+      let link = null;
+      if (p.html) {
+        const m = p.html.match(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
+        if (m) { link = m[1]; headline = m[2].trim(); }
+      }
+
+      const count = p.count || 1;
+      return {
+        feed: 'news',
+        icon: '📰',
+        title: headline || p.name || 'News cluster',
+        subtitle: `${p.name || 'Unknown'} · ${count} report${count > 1 ? 's' : ''}`,
+        detail: headline ? `Reported near ${p.name}. ${count} related article${count > 1 ? 's' : ''} in the last 24 hours.` : `${count} news reports geolocated to ${p.name}.`,
+        lat, lng,
+        time: Date.now(),
+        alert: count >= 10 ? 'Orange' : 'Cyan',
+        url: link,
+        radius: Math.min(4 + Math.log1p(count) * 2.5, 12),
+      };
+    }).filter(e => e.lat && e.lng && !(Math.abs(e.lat) < 0.5 && Math.abs(e.lng) < 0.5));
+  } catch (e) {
+    debugLog(`GDELT news events fetch failed: ${e.message}`, 'warn');
+    return [];
+  }
+}
+
+// ── Render markers on the map ──────────────────────────────────────────────
+function renderEventMarkers() {
+  if (eventLayerGroup) map.removeLayer(eventLayerGroup);
+  eventLayerGroup = L.layerGroup();
+
+  const visible = eventData.filter(e => eventFeedsEnabled[e.feed]);
+
+  visible.forEach(e => {
+    const color = e.alert === 'Cyan' ? '#00c8ff' : (ALERT_COLORS[e.alert]?.hex || '#00c8ff');
+    const size = e.radius * 2;
+
+    // Pinging marker for high-severity events
+    const shouldPing = e.alert === 'Red' || (e.feed === 'quake' && e.mag >= 5.5);
+
+    const marker = L.marker([e.lat, e.lng], {
+      icon: L.divIcon({
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        html: `
+          <div style="position:relative; width:${size}px; height:${size}px;">
+            ${shouldPing ? `<div class="event-ping" style="background:${color};"></div>` : ''}
+            <div style="
+              position:absolute; inset:0; border-radius:50%;
+              background:${color}; opacity:0.75;
+              border:1.5px solid ${color};
+              box-shadow: 0 0 ${e.radius}px ${color}88;
+            "></div>
+          </div>`
+      }),
+      zIndexOffset: e.alert === 'Red' ? 800 : 300,
+    });
+
+    const timeStr = e.time ? timeAgo(e.time) : 'Recent';
+    marker.bindPopup(`
+      <div style="min-width:210px; max-width:280px;">
+        <div class="event-popup-title" style="color:${color};">${e.icon} ${e.title}</div>
+        <div class="event-popup-meta">${e.subtitle} · ${timeStr}</div>
+        <div class="event-popup-detail">${e.detail}</div>
+        ${e.url ? `<a class="event-popup-link" href="${e.url}" target="_blank">Open source →</a>` : ''}
+      </div>`, { className: 'event-popup', maxWidth: 300 });
+
+    marker.addTo(eventLayerGroup);
+  });
+
+  eventLayerGroup.addTo(map);
+  document.getElementById('eventCount').textContent = `${visible.length}`;
+}
+
+// ── Render the side list ───────────────────────────────────────────────────
+function renderEventList() {
+  const visible = eventData.filter(e => eventFeedsEnabled[e.feed]);
+
+  if (visible.length === 0) {
+    document.getElementById('eventList').innerHTML =
+      '<div class="loading-msg">No events match the current filters.</div>';
+    return;
+  }
+
+  const html = visible.slice(0, 60).map(e => {
+    const cls = e.alert === 'Cyan' ? 'ev-cyan' : (ALERT_COLORS[e.alert]?.cls || 'ev-cyan');
+    const badge = e.feed === 'quake' ? `M${(e.mag || 0).toFixed(1)}`
+                : e.feed === 'disaster' ? (e.alert || '').toUpperCase().substring(0, 3)
+                : '';
+    return `
+      <div class="event-item" onclick="map.flyTo([${e.lat},${e.lng}], 6, {duration: 1.2})">
+        <div class="event-icon">${e.icon}</div>
+        <div class="event-info">
+          <div class="event-title">${e.title}</div>
+          <div class="event-meta">${e.subtitle} · ${e.time ? timeAgo(e.time) : 'Recent'}</div>
+        </div>
+        ${badge ? `<div class="event-mag ${cls}">${badge}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  document.getElementById('eventList').innerHTML = html;
+}
+
+// ==================== WEATHER LAYERS ====================
+// Rain radar comes from RainViewer (keyless). Wind and temperature are built
+// from a single Open-Meteo grid request covering the current viewport, so both
+// layers share one fetch.
+
+const wxOn = { rain: false, wind: false, temp: false };
+
+// ── Rain radar (RainViewer) ────────────────────────────────────────────────
+let radarFrames = [], radarHost = '', radarIdx = 0;
+let radarLayer = null, radarTimer = null, radarPlaying = false;
+const RADAR_COLOR = 4;      // "Titan" scheme — reads well on a dark basemap
+const RADAR_OPACITY = 0.75;
+
+async function loadRadarFrames() {
+  try {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    radarHost = d.host;
+    radarFrames = [...(d.radar?.past || []), ...(d.radar?.nowcast || [])];
+    if (!radarFrames.length) throw new Error('no frames returned');
+
+    const scrub = document.getElementById('wxScrub');
+    scrub.max = radarFrames.length - 1;
+    radarIdx = (d.radar?.past?.length || 1) - 1;   // start on the newest observation
+    scrub.value = radarIdx;
+
+    showRadarFrame(radarIdx);
+    debugLog(`Radar loaded — ${radarFrames.length} frames`, 'ok');
+    return true;
+  } catch (e) {
+    debugLog(`Radar unavailable: ${e.message}`, 'warn');
+    return false;
+  }
+}
+
+function showRadarFrame(i, fromScrub) {
+  if (!radarFrames.length) return;
+  radarIdx = (i + radarFrames.length) % radarFrames.length;
+  const f = radarFrames[radarIdx];
+
+  const next = L.tileLayer(
+    `${radarHost}${f.path}/512/{z}/{x}/{y}/${RADAR_COLOR}/1_1.png`,
+    { opacity: 0, zIndex: 350, tileSize: 512, zoomOffset: -1 }
+  );
+  next.addTo(map);
+
+  // Cross-fade so scrubbing doesn't flash the basemap
+  next.once('load', () => {
+    next.setOpacity(RADAR_OPACITY);
+    if (radarLayer) { const old = radarLayer; setTimeout(() => map.removeLayer(old), 120); }
+    radarLayer = next;
+  });
+  setTimeout(() => { if (next.options.opacity === 0) next.setOpacity(RADAR_OPACITY); }, 700);
+
+  const d = new Date(f.time * 1000);
+  const past = f.time * 1000 <= Date.now();
+  document.getElementById('wxFrameTime').textContent =
+    `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}` +
+    (past ? '' : ' forecast');
+
+  if (!fromScrub) document.getElementById('wxScrub').value = radarIdx;
+}
+
+function toggleRadarPlay() {
+  radarPlaying = !radarPlaying;
+  document.getElementById('wxPlay').textContent = radarPlaying ? '❚❚' : '▶';
+  if (radarPlaying) {
+    radarTimer = setInterval(() => showRadarFrame(radarIdx + 1), 550);
+  } else {
+    clearInterval(radarTimer); radarTimer = null;
+  }
+}
+
+function stopRadar() {
+  if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+  radarPlaying = false;
+  const p = document.getElementById('wxPlay');
+  if (p) p.textContent = '▶';
+  if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+}
+
+// ── Shared Open-Meteo grid (drives wind + temperature) ─────────────────────
+let windLayer = null, thermalLayer = null;
+let wxGrid = null, wxGridKey = '', wxFetching = false;
+
+const GRID_NX = 16, GRID_NY = 12;
+
+function viewportGridKey() {
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+    .map(v => v.toFixed(1)).join(',');
+}
+
+async function fetchWxGrid() {
+  if (wxFetching) return null;
+  const key = viewportGridKey();
+  if (key === wxGridKey && wxGrid) return wxGrid;   // viewport unchanged
+
+  wxFetching = true;
+  try {
+    const b = map.getBounds();
+    // Clamp to valid coordinate space; Mercator has no data past ±85
+    const n = Math.min(b.getNorth(), 84), s = Math.max(b.getSouth(), -84);
+    let w = b.getWest(), e = b.getEast();
+    if (e - w >= 359) { w = -180; e = 179; }         // whole world in view
+
+    const dy = (n - s) / (GRID_NY - 1);
+    const dx = (e - w) / (GRID_NX - 1);
+
+    const lats = [], lons = [];
+    for (let j = 0; j < GRID_NY; j++) {
+      for (let i = 0; i < GRID_NX; i++) {
+        lats.push((n - j * dy).toFixed(2));                    // north to south
+        lons.push((((w + i * dx + 180) % 360 + 360) % 360 - 180).toFixed(2));
+      }
+    }
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats.join(',')}` +
+                `&longitude=${lons.join(',')}` +
+                `&current=temperature_2m,wind_speed_10m,wind_direction_10m` +
+                `&wind_speed_unit=ms&timeformat=unixtime`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    let data = await res.json();
+    if (!Array.isArray(data)) data = [data];         // single point returns an object
+
+    const u = [], v = [], t = [];
+    data.forEach(pt => {
+      const c = pt.current || {};
+      const spd = c.wind_speed_10m ?? 0;
+      const rad = ((c.wind_direction_10m ?? 0) * Math.PI) / 180;
+      // Meteorological direction is where wind comes FROM, hence the negation
+      u.push(-spd * Math.sin(rad));
+      v.push(-spd * Math.cos(rad));
+      t.push(c.temperature_2m ?? null);
+    });
+
+    wxGrid = { u, v, t, nx: GRID_NX, ny: GRID_NY, lo1: w, la1: n, dx, dy };
+    wxGridKey = key;
+    debugLog(`Weather grid: ${data.length} points`, 'ok');
+    return wxGrid;
+  } catch (e) {
+    debugLog(`Weather grid failed: ${e.message}`, 'warn');
+    return null;
+  } finally {
+    wxFetching = false;
+  }
+}
+
+// ── Wind particle field ────────────────────────────────────────────────────
+const WIND_COLORS = ['#3b6ea5','#4da3ff','#5ec8d8','#7ddba0','#d8d86a','#f0a44a','#ef4444'];
+
+async function refreshWind() {
+  const g = await fetchWxGrid();
+  if (!g) return;
+
+  const header = {
+    nx: g.nx, ny: g.ny, lo1: g.lo1, la1: g.la1,
+    dx: g.dx, dy: g.dy, refTime: new Date().toISOString(),
+    parameterCategory: 2, parameterUnit: 'm.s-1',
+  };
+
+  const data = [
+    { header: { ...header, parameterNumber: 2, parameterNumberName: 'U-component_of_wind' }, data: g.u },
+    { header: { ...header, parameterNumber: 3, parameterNumberName: 'V-component_of_wind' }, data: g.v },
+  ];
+
+  if (windLayer) { map.removeLayer(windLayer); windLayer = null; }
+  windLayer = L.velocityLayer({
+    displayValues: false,
+    data,
+    minVelocity: 0,
+    maxVelocity: 18,
+    velocityScale: 0.012,
+    particleAge: 70,
+    lineWidth: 1.1,
+    particleMultiplier: 1 / 260,
+    colorScale: WIND_COLORS,
+    opacity: 0.82,
+  });
+  windLayer.addTo(map);
+}
+
+// ── Temperature field ──────────────────────────────────────────────────────
+// Custom canvas layer: bilinear interpolation over the grid, sampled every 8px.
+const TEMP_STOPS = [
+  [-30, [ 92,  58, 140]], [-15, [ 52,  94, 176]], [ -5, [ 66, 150, 205]],
+  [  2, [ 94, 200, 216]], [ 10, [125, 219, 160]], [ 18, [216, 216, 106]],
+  [ 26, [240, 164,  74]], [ 34, [231,  98,  62]], [ 45, [176,  42,  60]],
+];
+
+function tempColor(c) {
+  if (c <= TEMP_STOPS[0][0]) return TEMP_STOPS[0][1];
+  const last = TEMP_STOPS[TEMP_STOPS.length - 1];
+  if (c >= last[0]) return last[1];
+  for (let i = 0; i < TEMP_STOPS.length - 1; i++) {
+    const [a, ca] = TEMP_STOPS[i], [b, cb] = TEMP_STOPS[i + 1];
+    if (c >= a && c <= b) {
+      const f = (c - a) / (b - a);
+      return [0, 1, 2].map(k => Math.round(ca[k] + (cb[k] - ca[k]) * f));
+    }
+  }
+  return last[1];
+}
+
+const ThermalLayer = L.Layer.extend({
+  onAdd(map) {
+    this._map = map;
+    this._canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
+    this._canvas.style.pointerEvents = 'none';
+    this._canvas.style.opacity = '0.5';
+    map.getPanes().overlayPane.appendChild(this._canvas);
+    map.on('moveend zoomend resize', this._reset, this);
+    this._reset();
+  },
+  onRemove(map) {
+    map.off('moveend zoomend resize', this._reset, this);
+    if (this._canvas?.parentNode) this._canvas.parentNode.removeChild(this._canvas);
+  },
+  setGrid(g) { this._grid = g; this._reset(); },
+
+  _reset() {
+    if (!this._map || !this._canvas) return;
+    const size = this._map.getSize();
+    const tl = this._map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(this._canvas, tl);
+    this._canvas.width = size.x;
+    this._canvas.height = size.y;
+    this._draw();
+  },
+
+  _sample(lat, lon) {
+    const g = this._grid;
+    if (!g) return null;
+    const x = (lon - g.lo1) / g.dx;
+    const y = (g.la1 - lat) / g.dy;
+    if (x < 0 || y < 0 || x > g.nx - 1 || y > g.ny - 1) return null;
+
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const x1 = Math.min(x0 + 1, g.nx - 1), y1 = Math.min(y0 + 1, g.ny - 1);
+    const fx = x - x0, fy = y - y0;
+
+    const at = (xi, yi) => g.t[yi * g.nx + xi];
+    const q = [at(x0,y0), at(x1,y0), at(x0,y1), at(x1,y1)];
+    if (q.some(val => val === null || val === undefined)) return null;
+
+    return q[0]*(1-fx)*(1-fy) + q[1]*fx*(1-fy) + q[2]*(1-fx)*fy + q[3]*fx*fy;
+  },
+
+  _draw() {
+    const cv = this._canvas, ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!this._grid) return;
+
+    const STEP = 8;   // sample every 8px, then let the browser smooth it
+    const cols = Math.ceil(cv.width / STEP), rows = Math.ceil(cv.height / STEP);
+    const off = document.createElement('canvas');
+    off.width = cols; off.height = rows;
+    const octx = off.getContext('2d');
+    const img = octx.createImageData(cols, rows);
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const ll = this._map.containerPointToLatLng([c * STEP, r * STEP]);
+        const t = this._sample(ll.lat, ll.lng);
+        const p = (r * cols + c) * 4;
+        if (t === null) { img.data[p + 3] = 0; continue; }
+        const [rr, gg, bb] = tempColor(t);
+        img.data[p] = rr; img.data[p+1] = gg; img.data[p+2] = bb; img.data[p+3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(off, 0, 0, cv.width, cv.height);
+  }
+});
+
+async function refreshThermal() {
+  const g = await fetchWxGrid();
+  if (!g) return;
+  if (!thermalLayer) { thermalLayer = new ThermalLayer(); thermalLayer.addTo(map); }
+  thermalLayer.setGrid(g);
+}
+
+// ── Panel wiring ───────────────────────────────────────────────────────────
+async function toggleWxLayer(which) {
+  wxOn[which] = !wxOn[which];
+  document.getElementById('sw' + which[0].toUpperCase() + which.slice(1)).classList.toggle('on', wxOn[which]);
+
+  if (which === 'rain') {
+    document.getElementById('wxTimeline').classList.toggle('hidden', !wxOn.rain);
+    if (wxOn.rain) {
+      const ok = await loadRadarFrames();
+      if (!ok) { wxOn.rain = false; document.getElementById('swRain').classList.remove('on');
+                 document.getElementById('wxTimeline').classList.add('hidden'); }
+    } else stopRadar();
+  }
+
+  if (which === 'wind') {
+    document.getElementById('wxWindLegend').classList.toggle('hidden', !wxOn.wind);
+    if (wxOn.wind) await refreshWind();
+    else if (windLayer) { map.removeLayer(windLayer); windLayer = null; }
+  }
+
+  if (which === 'temp') {
+    document.getElementById('wxTempLegend').classList.toggle('hidden', !wxOn.temp);
+    if (wxOn.temp) await refreshThermal();
+    else if (thermalLayer) { map.removeLayer(thermalLayer); thermalLayer = null; }
+  }
+
+  const active = Object.values(wxOn).filter(Boolean).length;
+  document.getElementById('wxCount').textContent = active ? `${active} on` : 'off';
+}
+
+// Rebuild the grid-based layers when the viewport changes
+let wxMoveTimer = null;
+map.on('moveend', () => {
+  if (!wxOn.wind && !wxOn.temp) return;
+  clearTimeout(wxMoveTimer);
+  wxMoveTimer = setTimeout(async () => {
+    if (wxOn.wind) await refreshWind();
+    if (wxOn.temp) await refreshThermal();
+  }, 1400);
+});
+
+// Radar refreshes on RainViewer's own 5-minute cadence
+setInterval(() => { if (wxOn.rain) loadRadarFrames(); }, 300000);
+// Conditions drift slowly; a 15-minute grid refresh is plenty
+setInterval(() => {
+  if (!wxOn.wind && !wxOn.temp) return;
+  wxGridKey = '';
+  if (wxOn.wind) refreshWind();
+  if (wxOn.temp) refreshThermal();
+}, 900000);
+
+// Paint the legend ramps from the same colour definitions the layers use
+(function paintWxLegends() {
+  const wind = document.getElementById('wxWindRamp');
+  if (wind) wind.style.background = `linear-gradient(90deg, ${WIND_COLORS.join(',')})`;
+
+  const temp = document.getElementById('wxTempRamp');
+  if (temp) {
+    const stops = TEMP_STOPS.map(([c, rgb]) => {
+      const pct = ((c + 30) / 75) * 100;
+      return `rgb(${rgb.join(',')}) ${pct.toFixed(1)}%`;
+    });
+    temp.style.background = `linear-gradient(90deg, ${stops.join(',')})`;
+  }
+
+  const rain = document.getElementById('wxRainScale');
+  if (rain) rain.style.background =
+    'linear-gradient(90deg, rgba(120,180,220,0.35), #4da3ff, #34c759, #eab308, #f59e0b, #ef4444, #a855f7)';
+})();
+
+// ==================== FLIGHT TRACKER ====================
+// Live position comes from the active ADS-B source; the route, aircraft type
+// and photo come from adsbdb (free, keyless, CORS-enabled).
+
+let trkFlight = null;      // { live, route, craft }
+let trkTimer = null, trkFollow = false;
+let trkMarker = null, trkPath = null, trkFlown = null;
+
+const ADSBDB = 'https://api.adsbdb.com/v0';
+
+function haversineKm(a, b) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]), dLon = toRad(b[1] - a[1]);
+  const s = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// Great-circle interpolation so long routes bend correctly on the map
+function greatCircle(a, b, steps = 64) {
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const [lat1, lon1] = a.map(toRad), [lat2, lon2] = b.map(toRad);
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2-lat1)/2)**2 +
+    Math.cos(lat1)*Math.cos(lat2)*Math.sin((lon2-lon1)/2)**2));
+  if (!d) return [a, b];
+
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const A = Math.sin((1-f)*d) / Math.sin(d), B = Math.sin(f*d) / Math.sin(d);
+    const x = A*Math.cos(lat1)*Math.cos(lon1) + B*Math.cos(lat2)*Math.cos(lon2);
+    const y = A*Math.cos(lat1)*Math.sin(lon1) + B*Math.cos(lat2)*Math.sin(lon2);
+    const z = A*Math.sin(lat1) + B*Math.sin(lat2);
+    pts.push([toDeg(Math.atan2(z, Math.sqrt(x*x + y*y))), toDeg(Math.atan2(y, x))]);
+  }
+  return pts;
+}
+
+// Split a path where it crosses the antimeridian, or Leaflet draws a line
+// straight across the whole map
+function splitAtDateline(pts) {
+  const segs = [[]];
+  pts.forEach((p, i) => {
+    segs[segs.length-1].push(p);
+    if (i < pts.length-1 && Math.abs(p[1] - pts[i+1][1]) > 180) segs.push([]);
+  });
+  return segs.filter(s => s.length > 1);
+}
+
+async function jsonOrNull(url, ms = 7000) {
+  try {
+    const r = await fetchTimeout(url, ms);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+// Work out what the user typed: hex, registration, or callsign
+function classifyQuery(q) {
+  const s = q.trim().toUpperCase().replace(/\s+/g, '');
+  if (!s) return null;
+  if (/^[0-9A-F]{6}$/.test(s) && /[0-9]/.test(s)) return { kind: 'hex', value: s.toLowerCase() };
+  if (s.includes('-')) return { kind: 'reg', value: s };
+  return { kind: 'callsign', value: s };
+}
+
+async function trackFlight(query) {
+  const q = classifyQuery(query || '');
+  const card = document.getElementById('trkCard');
+  if (!q) { clearTracking(); return; }
+
+  card.innerHTML = `<div class="trk-card"><div class="loading-msg" style="padding:8px 0;"><span class="spinner"></span>Looking up ${q.value.toUpperCase()}</div></div>`;
+
+  const src = FLIGHT_SOURCES[activeFlightSource];
+  let live = null;
+
+  // Try the active source, then the others
+  for (let i = 0; i < FLIGHT_SOURCES.length && !live; i++) {
+    const s = FLIGHT_SOURCES[(activeFlightSource + i) % FLIGHT_SOURCES.length];
+    const d = await jsonOrNull(s.lookup(q.kind, q.value));
+    const ac = (d?.ac || d?.aircraft || []).filter(a => a.lat && a.lon);
+    if (ac.length) live = ac[0];
+  }
+
+  if (!live) {
+    card.innerHTML = `<div class="trk-card">
+      <div class="loading-msg" style="padding:8px 0;">
+        No live signal for <b>${q.value.toUpperCase()}</b>.<br>
+        It may be on the ground, out of ADS-B coverage, or not flying right now.
+      </div>
+      <div class="trk-actions"><button class="trk-btn" onclick="clearTracking()">Clear</button></div>
+    </div>`;
+    return;
+  }
+
+  const callsign = (live.flight || '').trim() || q.value.toUpperCase();
+
+  // Route and airframe details in parallel
+  const [routeRes, craftRes] = await Promise.all([
+    jsonOrNull(`${ADSBDB}/callsign/${encodeURIComponent(callsign)}`),
+    jsonOrNull(`${ADSBDB}/aircraft/${encodeURIComponent(live.hex || live.r || '')}`),
+  ]);
+
+  trkFlight = {
+    live,
+    route: routeRes?.response?.flightroute || null,
+    craft: craftRes?.response?.aircraft || null,
+  };
+
+  renderTrackCard();
+  drawTrackedFlight();
+
+  if (trkTimer) clearInterval(trkTimer);
+  trkTimer = setInterval(refreshTrackedFlight, 5000);
+
+  map.flyTo([live.lat, live.lon], Math.max(map.getZoom(), 6), { duration: 1.2 });
+  debugLog(`Tracking ${callsign}`, 'ok');
+}
+
+async function refreshTrackedFlight() {
+  if (!trkFlight) return;
+  const hex = trkFlight.live.hex;
+  if (!hex) return;
+
+  const s = FLIGHT_SOURCES[activeFlightSource];
+  const d = await jsonOrNull(s.lookup('hex', hex));
+  const ac = (d?.ac || d?.aircraft || []).filter(a => a.lat && a.lon);
+  if (!ac.length) return;
+
+  trkFlight.live = ac[0];
+  renderTrackCard();
+  drawTrackedFlight();
+  if (trkFollow) map.panTo([ac[0].lat, ac[0].lon], { animate: true, duration: 0.8 });
+}
+
+function flightPhase(live) {
+  const rate = live.baro_rate ?? live.geom_rate ?? 0;
+  const alt = live.alt_baro;
+  if (alt === 'ground' || (typeof alt === 'number' && alt < 500)) return { cls: 'trk-ground', label: 'On ground' };
+  if (rate > 400)  return { cls: 'trk-climb',   label: 'Climbing' };
+  if (rate < -400) return { cls: 'trk-descend', label: 'Descending' };
+  return { cls: 'trk-enroute', label: 'En route' };
+}
+
+function renderTrackCard() {
+  const { live, route, craft } = trkFlight;
+  const callsign = (live.flight || '').trim() || (live.r || live.hex || '').toUpperCase();
+  const phase = flightPhase(live);
+
+  const pos = [live.lat, live.lon];
+  const alt = typeof live.alt_baro === 'number' ? live.alt_baro : 0;
+  const gs = Math.round(live.gs || 0);
+
+  let routeHtml = '', timesHtml = '';
+
+  if (route?.origin && route?.destination) {
+    const o = [route.origin.latitude, route.origin.longitude];
+    const d = [route.destination.latitude, route.destination.longitude];
+    const total = haversineKm(o, d);
+    const done = haversineKm(o, pos);
+    const left = haversineKm(pos, d);
+    // Trust the along-track ratio rather than raw distance, so a diversion
+    // doesn't push progress past 100%
+    const pct = Math.max(0, Math.min(100, (done / (done + left || 1)) * 100));
+
+    const etaMin = gs > 40 ? Math.round((left / 1.852) / gs * 60) : null;
+    const eta = etaMin !== null
+      ? new Date(Date.now() + etaMin * 60000)
+      : null;
+
+    routeHtml = `
+      <div class="trk-route">
+        <div class="trk-ends">
+          <div>
+            <div class="trk-code">${route.origin.iata_code || route.origin.icao_code || '???'}</div>
+            <div class="trk-city">${route.origin.municipality || route.origin.name || ''}</div>
+          </div>
+          <div>
+            <div class="trk-code">${route.destination.iata_code || route.destination.icao_code || '???'}</div>
+            <div class="trk-city">${route.destination.municipality || route.destination.name || ''}</div>
+          </div>
+        </div>
+        <div class="trk-track">
+          <div class="trk-fill" style="width:${pct}%"></div>
+          <div class="trk-plane" style="left:${pct}%">✈</div>
+        </div>
+        <div class="trk-times">
+          <span>${Math.round(done)} km flown</span>
+          <span>${Math.round(left)} km to run</span>
+        </div>
+      </div>`;
+
+    if (eta) {
+      const hh = eta.getHours().toString().padStart(2, '0');
+      const mm = eta.getMinutes().toString().padStart(2, '0');
+      timesHtml = `<div class="trk-stat"><div class="k">Arriving ~</div><div class="v">${hh}:${mm}</div></div>`;
+    }
+  } else {
+    routeHtml = `<div class="trk-route"><div class="trk-city" style="max-width:none;">
+      No published route for this callsign. Position tracking still active.
+    </div></div>`;
+  }
+
+  const photo = craft?.url_photo_thumbnail || craft?.url_photo;
+  const craftHtml = craft ? `
+    <div class="trk-craft">
+      ${photo ? `<img class="trk-photo" src="${photo}" alt="" loading="lazy"
+                      onerror="this.style.display='none'">` : ''}
+      <div class="trk-craft-info">
+        <div class="trk-type">${craft.type || live.desc || live.t || 'Unknown type'}</div>
+        <div class="trk-owner">${[craft.registration, craft.registered_owner].filter(Boolean).join(' · ')}</div>
+      </div>
+    </div>` : '';
+
+  document.getElementById('trkCard').innerHTML = `
+    <div class="trk-card">
+      <div class="trk-top">
+        <div class="trk-id">
+          <div class="trk-call">${callsign}</div>
+          <div class="trk-airline">${route?.airline?.name || craft?.registered_owner || 'Unknown operator'}</div>
+        </div>
+        <span class="trk-state ${phase.cls}">${phase.label}</span>
+      </div>
+      ${routeHtml}
+      <div class="trk-grid">
+        <div class="trk-stat"><div class="k">Altitude</div><div class="v">${alt ? alt.toLocaleString() + ' ft' : '—'}</div></div>
+        <div class="trk-stat"><div class="k">Ground speed</div><div class="v">${gs ? gs + ' kt' : '—'}</div></div>
+        ${timesHtml || `<div class="trk-stat"><div class="k">Heading</div><div class="v">${Math.round(live.track ?? 0)}°</div></div>`}
+      </div>
+      ${craftHtml}
+      <div class="trk-actions">
+        <button class="trk-btn ${trkFollow ? 'on' : ''}" onclick="toggleFollow()">${trkFollow ? 'Following' : 'Follow'}</button>
+        <button class="trk-btn" onclick="clearTracking()">Clear</button>
+      </div>
+    </div>`;
+}
+
+function drawTrackedFlight() {
+  [trkPath, trkFlown, trkMarker].forEach(l => { if (l) map.removeLayer(l); });
+  trkPath = trkFlown = trkMarker = null;
+  if (!trkFlight) return;
+
+  const { live, route } = trkFlight;
+  const pos = [live.lat, live.lon];
+
+  if (route?.origin && route?.destination) {
+    const o = [route.origin.latitude, route.origin.longitude];
+    const d = [route.destination.latitude, route.destination.longitude];
+
+    trkPath = L.layerGroup();
+    // Remaining leg, dimmed
+    splitAtDateline(greatCircle(pos, d)).forEach(seg =>
+      L.polyline(seg, { color: '#4da3ff', weight: 1.5, opacity: 0.35, dashArray: '5 5' }).addTo(trkPath));
+    // Flown leg, solid
+    splitAtDateline(greatCircle(o, pos)).forEach(seg =>
+      L.polyline(seg, { color: '#4da3ff', weight: 2, opacity: 0.75 }).addTo(trkPath));
+
+    [[o, route.origin], [d, route.destination]].forEach(([c, ap]) => {
+      L.circleMarker(c, { radius: 4, color: '#4da3ff', fillColor: '#0d1219', fillOpacity: 1, weight: 2 })
+        .bindTooltip(`${ap.iata_code || ap.icao_code} — ${ap.name}`, { direction: 'top' })
+        .addTo(trkPath);
+    });
+    trkPath.addTo(map);
+  }
+
+  trkMarker = L.marker(pos, {
+    icon: L.divIcon({
+      className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+      html: `<div style="position:relative;width:30px;height:30px;">
+               <div class="event-ping" style="background:#4da3ff;"></div>
+               <div style="position:absolute;inset:0;display:grid;place-items:center;
+                    transform:rotate(${live.track || 0}deg);font-size:19px;color:#4da3ff;
+                    text-shadow:0 0 10px rgba(77,163,255,0.9);">✈</div>
+             </div>`
+    }),
+    zIndexOffset: 1500,
+  }).addTo(map);
+}
+
+function toggleFollow() {
+  trkFollow = !trkFollow;
+  renderTrackCard();
+  if (trkFollow && trkFlight) map.panTo([trkFlight.live.lat, trkFlight.live.lon]);
+}
+
+function clearTracking() {
+  if (trkTimer) { clearInterval(trkTimer); trkTimer = null; }
+  [trkPath, trkFlown, trkMarker].forEach(l => { if (l) map.removeLayer(l); });
+  trkPath = trkFlown = trkMarker = null;
+  trkFlight = null; trkFollow = false;
+  document.getElementById('trkCard').innerHTML = '';
+  document.getElementById('trkInput').value = '';
+}
+
+// Clicking a row in the flight list tracks that aircraft
+function trackFromList(hex) {
+  document.getElementById('trkInput').value = hex.toUpperCase();
+  trackFlight(hex);
+}
+
+// ==================== ROAD INCIDENTS ====================
+// TomTom Incident Details v5. Uses the same key as the traffic flow tiles.
+// The API caps queries at 10,000 km2, so this only runs at regional zoom.
+
+let incidentsActive = false;
+let incLayer = null, incData = [], incTimer = null, incFetching = false;
+let incFilters = { accident: true, closure: true, jam: true, works: true, hazard: true };
+
+const TT_BBOX_LIMIT_KM2 = 9500;   // sit just under TomTom's 10,000 ceiling
+
+// iconCategory values from the TomTom v5 spec
+const TT_CATEGORY = {
+  0:  { group: 'hazard',   icon: '⚠',  label: 'Unknown' },
+  1:  { group: 'accident', icon: '💥', label: 'Accident' },
+  2:  { group: 'hazard',   icon: '🌫', label: 'Fog' },
+  3:  { group: 'hazard',   icon: '⚠',  label: 'Dangerous conditions' },
+  4:  { group: 'hazard',   icon: '🌧', label: 'Rain' },
+  5:  { group: 'hazard',   icon: '🧊', label: 'Ice' },
+  6:  { group: 'jam',      icon: '🐌', label: 'Congestion' },
+  7:  { group: 'closure',  icon: '🚧', label: 'Lane closed' },
+  8:  { group: 'closure',  icon: '⛔', label: 'Road closed' },
+  9:  { group: 'works',    icon: '🚧', label: 'Roadworks' },
+  10: { group: 'hazard',   icon: '💨', label: 'Wind' },
+  11: { group: 'hazard',   icon: '🌊', label: 'Flooding' },
+  14: { group: 'hazard',   icon: '🚙', label: 'Broken down vehicle' },
+};
+
+const DELAY_STYLE = {
+  4: { color: '#ef4444', label: 'Major delay',    cls: 'ev-red' },
+  3: { color: '#ef4444', label: 'Major delay',    cls: 'ev-red' },
+  2: { color: '#f59e0b', label: 'Moderate delay', cls: 'ev-orange' },
+  1: { color: '#eab308', label: 'Minor delay',    cls: 'ev-orange' },
+  0: { color: '#4da3ff', label: '',               cls: 'ev-cyan' },
+};
+
+function viewportAreaKm2() {
+  const b = map.getBounds();
+  const midLat = (b.getNorth() + b.getSouth()) / 2;
+  const h = (b.getNorth() - b.getSouth()) * 111;
+  const w = (b.getEast() - b.getWest()) * 111 * Math.cos(midLat * Math.PI / 180);
+  return Math.abs(h * w);
+}
+
+function toggleIncidents(on) {
+  incidentsActive = on;
+  if (on) {
+    fetchIncidents();
+    incTimer = setInterval(fetchIncidents, 180000);   // TomTom refreshes ~every 2 min
+  } else {
+    if (incTimer) { clearInterval(incTimer); incTimer = null; }
+    if (incLayer) { map.removeLayer(incLayer); incLayer = null; }
+    incData = [];
+  }
+}
+
+function toggleIncFilter(group, btn) {
+  incFilters[group] = !incFilters[group];
+  btn.classList.toggle('active', incFilters[group]);
+  renderIncidentMarkers();
+  renderIncidentList();
+}
+
+async function fetchIncidents() {
+  if (incFetching || !incidentsActive) return;
+
+  const listEl = document.getElementById('incList');
+
+  if (!CONFIG.tomtomKey) {
+    listEl.innerHTML = '<div class="error-msg">Road incidents need a TomTom key. Add one in Settings.</div>';
+    return;
+  }
+
+  const area = viewportAreaKm2();
+  if (area > TT_BBOX_LIMIT_KM2) {
+    if (incLayer) { map.removeLayer(incLayer); incLayer = null; }
+    incData = [];
+    document.getElementById('incCount').textContent = '—';
+    listEl.innerHTML =
+      `<div class="loading-msg">Area in view is too wide for incident data.<br>` +
+      `Zoom in to about a city or county to load it.</div>`;
+    return;
+  }
+
+  incFetching = true;
+  if (incData.length === 0) {
+    listEl.innerHTML = '<div class="loading-msg"><span class="spinner"></span>Checking roads</div>';
+  }
+
+  try {
+    const b = map.getBounds();
+    const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(6)).join(',');
+    const fields = '{incidents{type,geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,' +
+                   'startTime,endTime,from,to,length,delay,roadNumbers,events{description,code}}}}';
+
+    const url = `https://api.tomtom.com/traffic/services/5/incidentDetails` +
+                `?key=${CONFIG.tomtomKey}&bbox=${bbox}&fields=${encodeURIComponent(fields)}` +
+                `&language=en-GB&timeValidityFilter=present`;
+
+    const res = await fetch(url);
+    if (res.status === 403) throw new Error('key rejected');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    incData = (data.incidents || []).map(f => {
+      const p = f.properties || {};
+      const cat = TT_CATEGORY[p.iconCategory] || TT_CATEGORY[0];
+      const geom = f.geometry || {};
+
+      // Point incidents give a coordinate pair; LineString incidents span a road
+      let lat, lng, path = null;
+      if (geom.type === 'LineString' && geom.coordinates?.length) {
+        path = geom.coordinates.map(c => [c[1], c[0]]);
+        const mid = path[Math.floor(path.length / 2)];
+        [lat, lng] = mid;
+      } else if (geom.coordinates?.length >= 2) {
+        [lng, lat] = geom.coordinates;
+      } else return null;
+
+      const desc = (p.events || []).map(e => e.description).filter(Boolean).join('; ');
+      const road = (p.roadNumbers || []).join(', ');
+
+      return {
+        group: cat.group,
+        icon: cat.icon,
+        label: cat.label,
+        title: desc || cat.label,
+        road,
+        from: p.from || '',
+        to: p.to || '',
+        delaySec: p.delay || 0,
+        lengthM: p.length || 0,
+        magnitude: p.magnitudeOfDelay ?? 0,
+        startTime: p.startTime ? new Date(p.startTime).getTime() : null,
+        endTime: p.endTime ? new Date(p.endTime).getTime() : null,
+        lat, lng, path,
+      };
+    }).filter(Boolean);
+
+    // Worst delays first
+    incData.sort((a, b) => (b.magnitude - a.magnitude) || (b.delaySec - a.delaySec));
+
+    renderIncidentMarkers();
+    renderIncidentList();
+    pulseRail('incidents');
+
+    const acc = incData.filter(i => i.group === 'accident').length;
+    debugLog(`${incData.length} road incidents${acc ? `, ${acc} accident${acc > 1 ? 's' : ''}` : ''}`, acc ? 'warn' : 'ok');
+  } catch (e) {
+    listEl.innerHTML = `<div class="error-msg">Could not load incidents: ${e.message}</div>`;
+    debugLog(`Road incidents failed: ${e.message}`, 'warn');
+  } finally {
+    incFetching = false;
+  }
+}
+
+function fmtDelay(sec) {
+  if (!sec) return '';
+  if (sec < 60) return `${sec}s delay`;
+  const m = Math.round(sec / 60);
+  return m < 60 ? `${m} min delay` : `${Math.floor(m / 60)}h ${m % 60}m delay`;
+}
+
+function renderIncidentMarkers() {
+  if (incLayer) map.removeLayer(incLayer);
+  incLayer = L.layerGroup();
+
+  const visible = incData.filter(i => incFilters[i.group]);
+
+  visible.forEach(inc => {
+    const style = DELAY_STYLE[inc.magnitude] || DELAY_STYLE[0];
+    const major = inc.magnitude >= 3 || inc.group === 'accident';
+
+    // Draw the affected stretch for LineString incidents
+    if (inc.path && inc.path.length > 1) {
+      L.polyline(inc.path, {
+        color: style.color, weight: 4, opacity: 0.7, lineCap: 'round',
+      }).addTo(incLayer);
+    }
+
+    const size = major ? 24 : 20;
+    const marker = L.marker([inc.lat, inc.lng], {
+      icon: L.divIcon({
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        html: `<div style="position:relative;width:${size}px;height:${size}px;">
+                 ${major ? `<div class="event-ping" style="background:${style.color};"></div>` : ''}
+                 <div style="position:absolute;inset:0;border-radius:50%;
+                      background:var(--ink-800);border:1.5px solid ${style.color};
+                      display:grid;place-items:center;font-size:${major ? 12 : 10}px;
+                      box-shadow:0 0 10px ${style.color}66;">${inc.icon}</div>
+               </div>`
+      }),
+      zIndexOffset: major ? 700 : 200,
+    });
+
+    const where = inc.road || [inc.from, inc.to].filter(Boolean).join(' → ') || 'Unknown road';
+    const bits = [
+      style.label,
+      fmtDelay(inc.delaySec),
+      inc.lengthM ? `${(inc.lengthM / 1000).toFixed(1)} km affected` : '',
+    ].filter(Boolean).join(' · ');
+
+    marker.bindPopup(`
+      <div style="min-width:200px;max-width:280px;">
+        <div class="event-popup-title" style="color:${style.color};">${inc.icon} ${inc.label}</div>
+        <div class="event-popup-meta">${where}</div>
+        <div class="event-popup-detail">${inc.title}</div>
+        ${bits ? `<div class="event-popup-meta" style="margin:7px 0 0;">${bits}</div>` : ''}
+      </div>`, { className: 'event-popup', maxWidth: 300 });
+
+    marker.addTo(incLayer);
+  });
+
+  incLayer.addTo(map);
+  document.getElementById('incCount').textContent = `${visible.length}`;
+}
+
+function renderIncidentList() {
+  const visible = incData.filter(i => incFilters[i.group]);
+  const el = document.getElementById('incList');
+
+  if (!visible.length) {
+    el.innerHTML = incData.length
+      ? '<div class="loading-msg">Nothing matches the current filters.</div>'
+      : '<div class="loading-msg">No incidents reported in this area.</div>';
+    return;
+  }
+
+  el.innerHTML = visible.slice(0, 60).map(inc => {
+    const style = DELAY_STYLE[inc.magnitude] || DELAY_STYLE[0];
+    const where = inc.road || [inc.from, inc.to].filter(Boolean).join(' → ') || inc.label;
+    const delay = fmtDelay(inc.delaySec);
+    return `
+      <div class="event-item" onclick="map.flyTo([${inc.lat},${inc.lng}], 14, {duration: 1.1})">
+        <div class="event-icon">${inc.icon}</div>
+        <div class="event-info">
+          <div class="event-title">${inc.title}</div>
+          <div class="event-meta">${where}${delay ? ' · ' + delay : ''}</div>
+        </div>
+        ${inc.magnitude >= 2 ? `<div class="event-mag ${style.cls}">${'!'.repeat(Math.min(inc.magnitude - 1, 3))}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// Incidents are viewport-scoped, so refetch after the map settles
+let incMoveTimer = null;
+map.on('moveend', () => {
+  if (!incidentsActive) return;
+  clearTimeout(incMoveTimer);
+  incMoveTimer = setTimeout(fetchIncidents, 1300);
+});
+
+// ==================== TEAR-OFF PANELS ====================
+// Panels sit in the dock by default. Drag a header to pull one out and float it;
+// double-click the header to put it back.
+(function initPanelDragging() {
+  document.querySelectorAll('.panel').forEach(panel => {
+    const header = panel.querySelector('.panel-header');
+    if (!header) return;
+
+    let dragging = false, startX, startY, originLeft, originTop;
+
+    const onDown = (e) => {
+      if (window.innerWidth <= 860) return;
+      if (e.target.closest('button, .panel-badge, a, input')) return;
+
+      const rect = panel.getBoundingClientRect();
+
+      // Lift out of the dock on first drag
+      if (!panel.classList.contains('floating')) {
+        panel.classList.add('floating');
+        document.body.appendChild(panel);
+        panel.style.width = rect.width + 'px';
+        updateDockState();
+      }
+
+      panel.style.left = rect.left + 'px';
+      panel.style.top = rect.top + 'px';
+      panel.classList.add('dragging');
+
+      const pt = e.touches ? e.touches[0] : e;
+      startX = pt.clientX; startY = pt.clientY;
+      originLeft = rect.left; originTop = rect.top;
+      dragging = true;
+
+      document.querySelectorAll('.panel.floating').forEach(p => p.style.zIndex = 700);
+      panel.style.zIndex = 760;
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
+      e.preventDefault();
+    };
+
+    const onMove = (e) => {
+      if (!dragging) return;
+      const pt = e.touches ? e.touches[0] : e;
+      const w = panel.offsetWidth, h = panel.offsetHeight;
+      const left = Math.max(0, Math.min(window.innerWidth - w, originLeft + pt.clientX - startX));
+      const top  = Math.max(48, Math.min(window.innerHeight - 44, originTop + pt.clientY - startY));
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+      e.preventDefault();
+    };
+
+    const onUp = () => {
+      dragging = false;
+      panel.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+
+    header.addEventListener('mousedown', onDown);
+    header.addEventListener('touchstart', onDown, { passive: false });
+    header.addEventListener('dblclick', () => {
+      if (panel.classList.contains('floating')) resetPanel(panel);
+    });
+  });
+
+  updateDockState();
+})();
+
 // ==================== AUTO-REFRESH FLIGHTS ON MAP MOVE/ZOOM ====================
 // Map pan/zoom: debounced fetch
 let moveTimeout;
@@ -2444,7 +4083,7 @@ map.on('moveend', () => {
   clearTimeout(moveTimeout);
   moveTimeout = setTimeout(() => {
     if (CONFIG.mode !== 'offline') fetchFlights();
-  }, 2000);
+  }, 1200);
 });
 
 let zoomTimeout;
@@ -2452,7 +4091,7 @@ map.on('zoomend', () => {
   clearTimeout(zoomTimeout);
   zoomTimeout = setTimeout(() => {
     if (CONFIG.mode !== 'offline') fetchFlights();
-  }, 1500);
+  }, 900);
 });
 </script>
 </body>
