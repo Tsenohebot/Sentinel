@@ -1977,7 +1977,12 @@ async function fetchTimeout(url, ms = 6000, opts = {}) {
   }
 }
 
-// All three speak the ADSBExchange v2 response shape, so parsing is identical.
+// All four speak the same ADSBExchange-derived v2 response shape, so parsing
+// is identical. adsb.lol/adsb.fi/adsb.one are three independent deployments
+// of the same readsb/tar1090 stack — if one is down the others often are too,
+// since they share the same underlying software and, at times, upstream data
+// sources. airplanes.live is a genuinely separate community deployment, kept
+// last since it's the newest addition here and the least load-tested.
 // adsb.lol leads because its limits are load-based rather than a fixed ceiling,
 // which lets us poll noticeably faster. adsb.one caps hard at 1 request/second.
 const FLIGHT_SOURCES = [
@@ -1990,6 +1995,9 @@ const FLIGHT_SOURCES = [
   { name: 'adsb.one', rateMs: 1100, pollSec: 15,
     buildUrl: (lat, lon, d) => `https://api.adsb.one/v2/point/${lat}/${lon}/${d}`,
     lookup: (kind, v) => `https://api.adsb.one/v2/${kind}/${v}` },
+  { name: 'airplanes.live', rateMs: 500, pollSec: 10,
+    buildUrl: (lat, lon, d) => `https://api.airplanes.live/v2/point/${lat}/${lon}/${d}`,
+    lookup: (kind, v) => `https://api.airplanes.live/v2/${kind}/${v}` },
 ];
 let activeFlightSource = 0;
 let sourceFailStreak = 0;     // rotate only after repeated failure, not one blip
