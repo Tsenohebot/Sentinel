@@ -863,7 +863,7 @@
           <span class="panel-badge badge-count" id="flightCount">—</span>
         </div>
         <div class="trk-search">
-          <input id="trkInput" class="trk-input" placeholder="Track a flight — BAW117, G-STBC, 4008F3"
+          <input id="trkInput" class="trk-input" placeholder="Track a flight — EK008, BAW117, G-STBC, 4008F3"
                  autocomplete="off" spellcheck="false"
                  onkeydown="if(event.key==='Enter'){event.preventDefault();trackFlight(this.value);}">
           <button class="trk-go" onclick="trackFlight(document.getElementById('trkInput').value)" aria-label="Track">→</button>
@@ -3499,12 +3499,21 @@ function splitAtDateline(pts) {
   return segs.filter(s => s.length > 1);
 }
 
+// Same direct-then-proxy fallback fetchPoint() uses for the map — without it,
+// single-flight lookups fail outright wherever the browser blocks the direct
+// cross-origin request (e.g. the Electron build, which loads over file://).
 async function jsonOrNull(url, ms = 7000) {
   try {
     const r = await fetchTimeout(url, ms);
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
+    if (r.ok) return await r.json();
+  } catch { /* fall through to proxies */ }
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const r = await fetchTimeout(proxy(url), ms + 3000);
+      if (r.ok) return await r.json();
+    } catch { /* try the next proxy */ }
+  }
+  return null;
 }
 
 // Work out what the user typed: hex, registration, or callsign
@@ -3512,8 +3521,34 @@ function classifyQuery(q) {
   const s = q.trim().toUpperCase().replace(/\s+/g, '');
   if (!s) return null;
   if (/^[0-9A-F]{6}$/.test(s) && /[0-9]/.test(s)) return { kind: 'hex', value: s.toLowerCase() };
-  if (s.includes('-')) return { kind: 'reg', value: s };
+  if (s.includes('-') || /^N[0-9][0-9A-Z]{1,5}$/.test(s)) return { kind: 'reg', value: s };
   return { kind: 'callsign', value: s };
+}
+
+// A typed flight number like EK008 is IATA-style (2-char airline code).
+// Aircraft only ever broadcast their ICAO callsign (3-char airline code,
+// no leading zeros on the number) — e.g. EK008 flies as UAE8. adsbdb
+// resolves this for known routes; this table is a local backup for when
+// it doesn't have the callsign, covering major carriers.
+const IATA_TO_ICAO_AIRLINE = {
+  AA:'AAL', DL:'DAL', UA:'UAL', WN:'SWA', AS:'ASA', B6:'JBU', F9:'FFT', NK:'NKS',
+  G4:'AAY', HA:'HAL', BA:'BAW', VS:'VIR', EI:'EIN', FR:'RYR', U2:'EZY', W6:'WZZ',
+  VY:'VLG', LH:'DLH', LX:'SWR', OS:'AUA', SN:'BEL', AF:'AFR', KL:'KLM', IB:'IBE',
+  AZ:'ITY', TP:'TAP', SK:'SAS', AY:'FIN', LO:'LOT', OK:'CSA', SU:'AFL',
+  EK:'UAE', EY:'ETD', QR:'QTR', WY:'OMA', SV:'SVA', GF:'GFA', RJ:'RJA', ME:'MEA',
+  TK:'THY', PC:'PGT', ET:'ETH', MS:'MSR', KQ:'KQA', SA:'SAA',
+  QF:'QFA', VA:'VOZ', NZ:'ANZ', JQ:'JST', SQ:'SIA', CX:'CPA', CI:'CAL', BR:'EVA',
+  JL:'JAL', NH:'ANA', KE:'KAL', OZ:'AAR', TG:'THA', MH:'MAS', GA:'GIA', PR:'PAL',
+  AI:'AIC', '6E':'IGO', SG:'SEJ', CA:'CCA', MU:'CES', CZ:'CSN', HU:'CHH', HX:'CRK',
+  AC:'ACA', AM:'AMX', LA:'LAN', AV:'AVA', CM:'CMP', G3:'GLO', AR:'ARG', AD:'AZU',
+};
+
+function guessIcaoCallsign(raw) {
+  const m = raw.match(/^([A-Z0-9]{2})(\d{1,4})([A-Z]?)$/);
+  if (!m) return null;
+  const icao = IATA_TO_ICAO_AIRLINE[m[1]];
+  if (!icao) return null;
+  return `${icao}${parseInt(m[2], 10)}${m[3]}`;
 }
 
 async function trackFlight(query) {
@@ -3523,23 +3558,43 @@ async function trackFlight(query) {
 
   card.innerHTML = `<div class="trk-card"><div class="loading-msg" style="padding:8px 0;"><span class="spinner"></span>Looking up ${q.value.toUpperCase()}</div></div>`;
 
-  const src = FLIGHT_SOURCES[activeFlightSource];
-  let live = null;
+  // A callsign query might be an IATA flight number (EK008) rather than the
+  // ICAO callsign aircraft actually broadcast (UAE8) — resolve it via adsbdb
+  // and a local airline table, then search every candidate form, most likely
+  // (resolved ICAO) first.
+  let route = null;
+  let searchTerms = [q.value];
+  if (q.kind === 'callsign') {
+    const routeRes = await jsonOrNull(`${ADSBDB}/callsign/${encodeURIComponent(q.value)}`);
+    route = routeRes?.response?.flightroute || null;
+    const resolved = [route?.callsign_icao, guessIcaoCallsign(q.value)]
+      .filter(Boolean).map(s => s.toUpperCase());
+    searchTerms = [...new Set([...resolved, q.value])];
+  }
 
-  // Try the active source, then the others
-  for (let i = 0; i < FLIGHT_SOURCES.length && !live; i++) {
-    const s = FLIGHT_SOURCES[(activeFlightSource + i) % FLIGHT_SOURCES.length];
-    const d = await jsonOrNull(s.lookup(q.kind, q.value));
-    const ac = (d?.ac || d?.aircraft || []).filter(a => a.lat && a.lon);
-    if (ac.length) live = ac[0];
+  let live = null;
+  for (const term of searchTerms) {
+    for (let i = 0; i < FLIGHT_SOURCES.length && !live; i++) {
+      const s = FLIGHT_SOURCES[(activeFlightSource + i) % FLIGHT_SOURCES.length];
+      const d = await jsonOrNull(s.lookup(q.kind, term));
+      const ac = (d?.ac || d?.aircraft || []).filter(a => a.lat && a.lon);
+      if (ac.length) live = ac[0];
+    }
+    if (live) break;
   }
 
   if (!live) {
+    const known = route?.airline?.name ? `<div class="loading-msg" style="padding:8px 0 0;">
+        ${route.airline.name}${route.origin && route.destination
+          ? ` · ${route.origin.iata_code || route.origin.icao_code || '???'} → ${route.destination.iata_code || route.destination.icao_code || '???'}`
+          : ''}
+      </div>` : '';
     card.innerHTML = `<div class="trk-card">
       <div class="loading-msg" style="padding:8px 0;">
         No live signal for <b>${q.value.toUpperCase()}</b>.<br>
         It may be on the ground, out of ADS-B coverage, or not flying right now.
       </div>
+      ${known}
       <div class="trk-actions"><button class="trk-btn" onclick="clearTracking()">Clear</button></div>
     </div>`;
     return;
@@ -3547,9 +3602,12 @@ async function trackFlight(query) {
 
   const callsign = (live.flight || '').trim() || q.value.toUpperCase();
 
-  // Route and airframe details in parallel
+  // Route and airframe details in parallel — reuse the route already
+  // resolved above where we have it, otherwise look it up by the callsign
+  // now confirmed live (covers hex/reg lookups, which skip the step above).
   const [routeRes, craftRes] = await Promise.all([
-    jsonOrNull(`${ADSBDB}/callsign/${encodeURIComponent(callsign)}`),
+    route ? Promise.resolve({ response: { flightroute: route } })
+          : jsonOrNull(`${ADSBDB}/callsign/${encodeURIComponent(callsign)}`),
     jsonOrNull(`${ADSBDB}/aircraft/${encodeURIComponent(live.hex || live.r || '')}`),
   ]);
 
