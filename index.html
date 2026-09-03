@@ -2054,10 +2054,10 @@ function buildQueryGrid(bounds) {
   const latSpan = n - s, lonSpan = e - w;
   const cLat = (n + s) / 2, cLon = (e + w) / 2;
 
-  // One 250nm query covers roughly 8 degrees of latitude
-  if (latSpan < 8 && lonSpan < 12) return [{ lat: cLat, lon: cLon }];
+  // One 100nm query covers roughly 3.3 degrees of latitude
+  if (latSpan < 3.3 && lonSpan < 5) return [{ lat: cLat, lon: cLon }];
 
-  const step = 7;
+  const step = 3;
   const points = [];
   for (let lat = s + step / 2; lat < n + step / 2; lat += step) {
     for (let lon = w + step / 2; lon < e + step / 2; lon += step) {
@@ -2083,7 +2083,11 @@ async function probeFlightSources() {
   const results = [];
 
   await Promise.all(FLIGHT_SOURCES.map(async (s, i) => {
-    const url = s.buildUrl('51.50', '-0.12', 100);
+    // A small radius here on purpose: this only needs to prove the source is
+    // reachable. A wide radius over a busy hub like London returns a payload
+    // large enough that free CORS proxies choke relaying it (timeout, or fail
+    // outright) even though the source itself answers fine.
+    const url = s.buildUrl('51.50', '-0.12', 10);
     const started = performance.now();
     const why = [];
 
@@ -2162,7 +2166,9 @@ async function fetchFlights() {
     // Sequential, spaced requests — parallel bursts trip the rate limiter
     for (const p of queryPoints) {
       await throttle(source.rateMs);
-      const r = await fetchPoint(p.lat, p.lon, 250, source);
+      // Kept small (nm) for the same reason the startup probe is: a wide
+      // radius over a busy hub returns a payload free CORS proxies choke on.
+      const r = await fetchPoint(p.lat, p.lon, 100, source);
 
       if (r.rateLimited) { rateLimited = true; break; }
       if (!r.ok) {
