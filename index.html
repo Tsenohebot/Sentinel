@@ -1944,8 +1944,15 @@ const MAX_QUERY_POINTS = 4;      // each point is one rate-limited request
 let flightRefreshCountdown = 6;
 let flightPollTimer = null;
 
-// Poll cadence follows the active source's tolerance
-function flightPollSec() { return FLIGHT_SOURCES[activeFlightSource].pollSec; }
+// Poll cadence follows the active source's tolerance, backed off hard once
+// every source has failed a full rotation — retrying free CORS proxies every
+// few seconds while they're down just keeps piling load on them.
+let fullCycleFailStreak = 0;
+function flightPollSec() {
+  const base = FLIGHT_SOURCES[activeFlightSource].pollSec;
+  const backoff = Math.min(2 ** fullCycleFailStreak, 20);   // caps around 5-10 min
+  return base * backoff;
+}
 
 function scheduleFlightPolling() {
   if (flightPollTimer) clearInterval(flightPollTimer);
@@ -2211,6 +2218,7 @@ async function fetchFlights() {
     }
 
     sourceFailStreak = 0;
+    fullCycleFailStreak = 0;
 
     if (merged.size === 0) {
       document.getElementById('flightList').innerHTML =
@@ -2252,12 +2260,19 @@ async function fetchFlights() {
 }
 
 function rotateSource(reason) {
+  // Completing a lap back to the first source means every source just
+  // failed — that's when backoff should grow, not on every single failure.
+  const completedLap = activeFlightSource === FLIGHT_SOURCES.length - 1;
   activeFlightSource = (activeFlightSource + 1) % FLIGHT_SOURCES.length;
+  if (completedLap) fullCycleFailStreak++;
   sourceFailStreak = 0;
   lastRequestAt = 0;
   scheduleFlightPolling();
   const s = FLIGHT_SOURCES[activeFlightSource];
-  debugLog(`Switching to ${s.name}, polling every ${s.pollSec}s (${reason})`, 'warn');
+  const backoffNote = fullCycleFailStreak > 0
+    ? ` — backing off after ${fullCycleFailStreak} failed sweep${fullCycleFailStreak > 1 ? 's' : ''}`
+    : '';
+  debugLog(`Switching to ${s.name}, polling every ${flightPollSec()}s (${reason})${backoffNote}`, 'warn');
 }
 
 function createPlaneIcon(heading) {
