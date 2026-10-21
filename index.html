@@ -1944,8 +1944,15 @@ const MAX_QUERY_POINTS = 4;      // each point is one rate-limited request
 let flightRefreshCountdown = 6;
 let flightPollTimer = null;
 
-// Poll cadence follows the active source's tolerance
-function flightPollSec() { return FLIGHT_SOURCES[activeFlightSource].pollSec; }
+// Poll cadence follows the active source's tolerance, backed off hard once
+// every source has failed a full rotation — retrying free CORS proxies every
+// few seconds while they're down just keeps piling load on them.
+let fullCycleFailStreak = 0;
+function flightPollSec() {
+  const base = FLIGHT_SOURCES[activeFlightSource].pollSec;
+  const backoff = Math.min(2 ** fullCycleFailStreak, 20);   // caps around 5-10 min
+  return base * backoff;
+}
 
 function scheduleFlightPolling() {
   if (flightPollTimer) clearInterval(flightPollTimer);
@@ -1977,7 +1984,12 @@ async function fetchTimeout(url, ms = 6000, opts = {}) {
   }
 }
 
-// All three speak the ADSBExchange v2 response shape, so parsing is identical.
+// All four speak the same ADSBExchange-derived v2 response shape, so parsing
+// is identical. adsb.lol/adsb.fi/adsb.one are three independent deployments
+// of the same readsb/tar1090 stack — if one is down the others often are too,
+// since they share the same underlying software and, at times, upstream data
+// sources. airplanes.live is a genuinely separate community deployment, kept
+// last since it's the newest addition here and the least load-tested.
 // adsb.lol leads because its limits are load-based rather than a fixed ceiling,
 // which lets us poll noticeably faster. adsb.one caps hard at 1 request/second.
 const FLIGHT_SOURCES = [
@@ -1990,6 +2002,9 @@ const FLIGHT_SOURCES = [
   { name: 'adsb.one', rateMs: 1100, pollSec: 15,
     buildUrl: (lat, lon, d) => `https://api.adsb.one/v2/point/${lat}/${lon}/${d}`,
     lookup: (kind, v) => `https://api.adsb.one/v2/${kind}/${v}` },
+  { name: 'airplanes.live', rateMs: 500, pollSec: 10,
+    buildUrl: (lat, lon, d) => `https://api.airplanes.live/v2/point/${lat}/${lon}/${d}`,
+    lookup: (kind, v) => `https://api.airplanes.live/v2/${kind}/${v}` },
 ];
 let activeFlightSource = 0;
 let sourceFailStreak = 0;     // rotate only after repeated failure, not one blip
@@ -2046,10 +2061,10 @@ function buildQueryGrid(bounds) {
   const latSpan = n - s, lonSpan = e - w;
   const cLat = (n + s) / 2, cLon = (e + w) / 2;
 
-  // One 250nm query covers roughly 8 degrees of latitude
-  if (latSpan < 8 && lonSpan < 12) return [{ lat: cLat, lon: cLon }];
+  // One 100nm query covers roughly 3.3 degrees of latitude
+  if (latSpan < 3.3 && lonSpan < 5) return [{ lat: cLat, lon: cLon }];
 
-  const step = 7;
+  const step = 3;
   const points = [];
   for (let lat = s + step / 2; lat < n + step / 2; lat += step) {
     for (let lon = w + step / 2; lon < e + step / 2; lon += step) {
@@ -2075,7 +2090,11 @@ async function probeFlightSources() {
   const results = [];
 
   await Promise.all(FLIGHT_SOURCES.map(async (s, i) => {
-    const url = s.buildUrl('51.50', '-0.12', 100);
+    // A small radius here on purpose: this only needs to prove the source is
+    // reachable. A wide radius over a busy hub like London returns a payload
+    // large enough that free CORS proxies choke relaying it (timeout, or fail
+    // outright) even though the source itself answers fine.
+    const url = s.buildUrl('51.50', '-0.12', 10);
     const started = performance.now();
     const why = [];
 
@@ -2154,7 +2173,9 @@ async function fetchFlights() {
     // Sequential, spaced requests — parallel bursts trip the rate limiter
     for (const p of queryPoints) {
       await throttle(source.rateMs);
-      const r = await fetchPoint(p.lat, p.lon, 250, source);
+      // Kept small (nm) for the same reason the startup probe is: a wide
+      // radius over a busy hub returns a payload free CORS proxies choke on.
+      const r = await fetchPoint(p.lat, p.lon, 100, source);
 
       if (r.rateLimited) { rateLimited = true; break; }
       if (!r.ok) {
@@ -2197,6 +2218,7 @@ async function fetchFlights() {
     }
 
     sourceFailStreak = 0;
+    fullCycleFailStreak = 0;
 
     if (merged.size === 0) {
       document.getElementById('flightList').innerHTML =
@@ -2238,12 +2260,19 @@ async function fetchFlights() {
 }
 
 function rotateSource(reason) {
+  // Completing a lap back to the first source means every source just
+  // failed — that's when backoff should grow, not on every single failure.
+  const completedLap = activeFlightSource === FLIGHT_SOURCES.length - 1;
   activeFlightSource = (activeFlightSource + 1) % FLIGHT_SOURCES.length;
+  if (completedLap) fullCycleFailStreak++;
   sourceFailStreak = 0;
   lastRequestAt = 0;
   scheduleFlightPolling();
   const s = FLIGHT_SOURCES[activeFlightSource];
-  debugLog(`Switching to ${s.name}, polling every ${s.pollSec}s (${reason})`, 'warn');
+  const backoffNote = fullCycleFailStreak > 0
+    ? ` — backing off after ${fullCycleFailStreak} failed sweep${fullCycleFailStreak > 1 ? 's' : ''}`
+    : '';
+  debugLog(`Switching to ${s.name}, polling every ${flightPollSec()}s (${reason})${backoffNote}`, 'warn');
 }
 
 function createPlaneIcon(heading) {
